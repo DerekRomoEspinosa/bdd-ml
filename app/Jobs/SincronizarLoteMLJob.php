@@ -1,0 +1,108 @@
+<?php
+
+namespace App\Jobs;
+
+use App\Models\Producto;
+use App\Services\MercadoLibreService;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
+
+/**
+ * Job de Lote SIMPLIFICADO - Sin Cache
+ */
+class SincronizarLoteMLJob implements ShouldQueue
+{
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    public $timeout = 900;
+    public $tries = 3;
+    public $backoff = [60, 300, 900];
+
+    protected array $productosIds;
+    protected string $sessionId;
+    protected int $numeroLote;
+
+    public function __construct(array $productosIds, string $sessionId, int $numeroLote)
+    {
+        $this->productosIds = $productosIds;
+        $this->sessionId = $sessionId;
+        $this->numeroLote = $numeroLote;
+    }
+
+    public function handle(MercadoLibreService $mlService)
+    {
+        $inicioLote = now();
+        
+        Log::info("🔄 Procesando Lote #{$this->numeroLote}", [
+            'session_id' => $this->sessionId,
+            'productos_en_lote' => count($this->productosIds),
+            'intento' => $this->attempts()
+        ]);
+
+        $sincronizados = 0;
+        $errores = 0;
+
+        // Cargar productos del lote
+        $productos = Producto::whereIn('id', $this->productosIds)
+            ->where('activo', true)
+            ->get();
+
+        if ($productos->isEmpty()) {
+            Log::warning("⚠️ Lote #{$this->numeroLote} sin productos válidos");
+            return;
+        }
+
+        foreach ($productos as $index => $producto) {
+            try {
+               $numero = $index + 1;
+                     $total = $productos->count();
+                    Log::debug("  → Sincronizando {$producto->sku_ml} ({$numero}/{$total})");
+
+                $datos = $mlService->sincronizarProducto($producto->sku_ml);
+
+                $producto->update([
+                    'stock_full' => $datos['stock_full'],
+                    'ventas_30_dias' => $datos['ventas_30_dias'],
+                    'ml_ultimo_sync' => $datos['sincronizado_en'],
+                ]);
+                
+                $sincronizados++;
+
+            } catch (\Exception $e) {
+                $errores++;
+                Log::error("  ✗ Error en {$producto->sku_ml}: {$e->getMessage()}");
+            }
+
+            // Pausa entre productos (250ms)
+            usleep(250000);
+        }
+
+        $tiempoTotal = $inicioLote->diffInSeconds(now());
+
+        Log::info("✅ Lote #{$this->numeroLote} COMPLETADO", [
+            'session_id' => $this->sessionId,
+            'exitosos' => $sincronizados,
+            'fallidos' => $errores,
+            'total' => $productos->count(),
+            'tiempo_segundos' => $tiempoTotal,
+            'tasa_exito' => round(($sincronizados / $productos->count()) * 100, 2) . '%'
+        ]);
+
+        // Liberar memoria
+        unset($productos);
+        gc_collect_cycles();
+    }
+
+    public function failed(\Throwable $exception)
+    {
+        Log::error("💥 Lote #{$this->numeroLote} FALLÓ", [
+            'session_id' => $this->sessionId,
+            'productos_ids' => $this->productosIds,
+            'error' => $exception->getMessage(),
+        ]);
+    }
+}
