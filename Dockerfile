@@ -15,18 +15,14 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# Dependencias PHP
-COPY composer.json composer.lock ./
+# COPIAR TODO EL PROYECTO PRIMERO 👈
+COPY . .
+
+# Composer (artisan ya existe aquí)
 RUN composer install --no-dev --optimize-autoloader --no-interaction
 
 # Frontend
-COPY package.json package-lock.json ./
-RUN npm ci
-
-# Código
-COPY . .
-
-RUN npm run build
+RUN npm ci && npm run build
 
 # Permisos Laravel
 RUN chmod -R 777 storage bootstrap/cache
