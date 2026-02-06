@@ -51,7 +51,7 @@ class ExcelController extends Controller
             ]);
 
             // Importar productos
-            $resultado = $this->importService->importarProductos($path);
+           $resultado = $this->importService->import($path);
 
             Log::info("Importación completada", $resultado);
 
