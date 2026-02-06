@@ -1,40 +1,42 @@
-FROM php:8.3-cli
+FROM php:8.3-fpm
 
-# Instalar dependencias
+# Dependencias del sistema
 RUN apt-get update && apt-get install -y \
     git curl libpng-dev libonig-dev libxml2-dev \
-    zip unzip libpq-dev libzip-dev \
-    && docker-php-ext-install pdo pdo_pgsql mbstring exif pcntl bcmath gd zip \
+    zip unzip libpq-dev libzip-dev nginx \
+    && docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd zip \
     && rm -rf /var/lib/apt/lists/*
 
 # Node.js
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y nodejs
 
 # Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# Copiar y instalar dependencias
+# PHP deps
 COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-scripts --optimize-autoloader --no-interaction
+RUN composer install --no-dev --optimize-autoloader --no-interaction
 
+# JS deps
 COPY package.json package-lock.json ./
 RUN npm ci
 
-# Copiar código
+# Código
 COPY . .
 
-# Build assets
+# Build frontend
 RUN npm run build
 
-# Permisos
+# Permisos Laravel
 RUN mkdir -p storage/framework/{sessions,views,cache} \
     && chmod -R 777 storage bootstrap/cache
 
-# Puerto
-EXPOSE 8000
+# Nginx config
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 
-# Inicio sin artisan serve
-CMD php artisan migrate --force && php -S 0.0.0.0:${PORT:-8000} -t public
+EXPOSE 80
+
+CMD service nginx start && php-fpm
