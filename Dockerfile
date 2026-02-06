@@ -1,49 +1,38 @@
-FROM php:8.3-fpm
+FROM php:8.2-fpm
 
-# Dependencias del sistema
+# Instalar dependencias del sistema
 RUN apt-get update && apt-get install -y \
-    git curl nginx \
-    libpng-dev libjpeg-dev libfreetype6-dev \
-    libonig-dev libxml2-dev libzip-dev \
-    zip unzip \
+    nginx \
+    git \
+    unzip \
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
+    libzip-dev \
+    zip \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd zip \
-    && rm -rf /var/lib/apt/lists/*
+    && docker-php-ext-install pdo pdo_mysql gd zip
 
-
-# Node.js
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs
-
-# Composer
+# Instalar Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
+# Directorio de trabajo
 WORKDIR /var/www/html
 
-# PHP deps
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-scripts --optimize-autoloader --no-interaction
-
-# JS deps
-COPY package.json package-lock.json ./
-RUN npm ci
-
-# Código
+# Copiar proyecto
 COPY . .
 
-# Build frontend
-RUN npm run build
-
 # Permisos Laravel
-RUN mkdir -p storage/framework/{sessions,views,cache} \
-    && chmod -R 777 storage bootstrap/cache
+RUN chown -R www-data:www-data /var/www/html \
+    && chmod -R 775 storage bootstrap/cache
 
-# Nginx config
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+# Instalar dependencias PHP
+RUN composer install --no-dev --optimize-autoloader
 
-EXPOSE 80
+# Config nginx
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-CMD envsubst '$PORT' < /etc/nginx/conf.d/default.conf > /etc/nginx/conf.d/default.conf \
-    && service nginx start \
-    && php-fpm
+# Exponer puerto (Railway lo reemplaza)
+EXPOSE 8080
 
+CMD sh -c "php-fpm -D && nginx -g 'daemon off;'"
