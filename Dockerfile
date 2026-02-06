@@ -28,16 +28,12 @@ RUN npm ci && npm run build
 RUN chmod -R 775 storage bootstrap/cache && \
     chown -R www-data:www-data /var/www/html
 
-# CONFIGURACIÓN DE NGINX:
-# Borramos el default de Nginx y enlazamos el tuyo
+# Configuración de Nginx
 RUN rm -f /etc/nginx/sites-enabled/default
 COPY docker/nginx.conf /etc/nginx/sites-available/default
 RUN ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 
 EXPOSE 80
 
-# COMANDO DE INICIO:
-# 1. Corre migraciones (force para producción)
-# 2. Inicia PHP-FPM en segundo plano
-# 3. Inicia Nginx en primer plano
-CMD ["sh", "-c", "php artisan migrate --force && php-fpm -D && nginx -g 'daemon off;'"]
+# COMANDO DE INICIO: Limpia cache, migra y arranca
+CMD ["sh", "-c", "php artisan config:clear && php artisan migrate --force && php-fpm -D && nginx -g 'daemon off;'"]
