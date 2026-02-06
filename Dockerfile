@@ -1,44 +1,40 @@
-FROM php:8.3-fpm
+FROM php:8.3-cli
 
-# Instalar dependencias del sistema
+# Instalar dependencias
 RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    libpng-dev \
-    libonig-dev \
-    libxml2-dev \
-    zip \
-    unzip \
-    libpq-dev \
-    libzip-dev
+    git curl libpng-dev libonig-dev libxml2-dev \
+    zip unzip libpq-dev libzip-dev \
+    && docker-php-ext-install pdo pdo_pgsql mbstring exif pcntl bcmath gd zip \
+    && rm -rf /var/lib/apt/lists/*
 
-# Instalar Node.js 20
+# Node.js
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs
+    && apt-get install -y nodejs && rm -rf /var/lib/apt/lists/*
 
-# Instalar extensiones de PHP
-RUN docker-php-ext-install pdo pdo_pgsql mbstring exif pcntl bcmath gd zip
-
-# Instalar Composer
+# Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Configurar directorio de trabajo
 WORKDIR /var/www/html
 
-# Copiar archivos del proyecto
+# Copiar y instalar dependencias
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-scripts --optimize-autoloader --no-interaction
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copiar código
 COPY . .
 
-# Instalar dependencias de Composer
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+# Build assets
+RUN npm run build
 
-# Instalar dependencias de NPM y compilar assets
-RUN npm ci && npm run build
+# Permisos
+RUN mkdir -p storage/framework/{sessions,views,cache} \
+    && chmod -R 777 storage bootstrap/cache
 
-# Dar permisos
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
-
-# Exponer puerto
+# Puerto
 EXPOSE 8000
 
-# Comando de inicio
-CMD php artisan migrate --force && php -S 0.0.0.0:$PORT -t public
+# Inicio sin artisan serve
+CMD php artisan migrate --force && php -S 0.0.0.0:${PORT:-8000} -t public
