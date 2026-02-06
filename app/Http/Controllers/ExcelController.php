@@ -50,21 +50,18 @@ class ExcelController extends Controller
                 'size' => $file->getSize(),
             ]);
 
-            // Importar productos
-           $resultado = $this->importService->import($path);
+           // Importar productos
+            $resultado = $this->importService->import($path);
 
             Log::info("Importación completada", $resultado);
 
-            $mensaje = "✅ Importación exitosa: ";
-            $mensaje .= "{$resultado['importados']} productos nuevos creados";
-            
-            if ($resultado['actualizados'] > 0) {
-                $mensaje .= ", {$resultado['actualizados']} productos actualizados";
+            // Si el servicio falló antes de procesar filas
+            if (!$resultado['success']) {
+                throw new \Exception($resultado['error'] ?? 'Error desconocido en el servicio');
             }
-            
-            if ($resultado['errores'] > 0) {
-                $mensaje .= " | ⚠️ {$resultado['errores']} errores";
-            }
+
+            // Usamos el mensaje que ya viene armado desde el ExcelImportService
+            $mensaje = $resultado['mensaje'];
 
             return redirect()
                 ->route('productos.index')
