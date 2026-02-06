@@ -7,17 +7,21 @@ use Illuminate\Database\Eloquent\Model;
 class Producto extends Model
 {
     protected $fillable = [
-        'modelo',
-        'sku_ml',
-        'nombre',
-        'activo',
-        'stock_bodega',
-        'stock_cortado',
-        'stock_enviado_full',
-        'stock_full',
-        'ventas_30_dias',
-        'ml_ultimo_sync',
-    ];
+    'nombre',
+    'modelo',
+    'sku_ml',
+    'codigo_interno_ml',        
+    'plantilla_corte_url',      
+    'stock_bodega',
+    'stock_cortado',
+    'stock_costura',            
+    'stock_por_empacar',        
+    'stock_enviado_full',
+    'stock_full',
+    'ventas_30_dias',
+    'ml_ultimo_sync',
+    'activo',
+];
 
     protected $casts = [
         'activo' => 'boolean',
@@ -27,13 +31,15 @@ class Producto extends Model
     /**
      * Calcula el stock total disponible
      */
-    public function getStockTotalAttribute(): int
-    {
-        return $this->stock_bodega 
-             + $this->stock_cortado 
-             + $this->stock_enviado_full 
-             + ($this->stock_full ?? 0);
-    }
+    public function getStockTotalAttribute()
+{
+    return $this->stock_bodega 
+         + $this->stock_cortado 
+         + $this->stock_costura          
+         + $this->stock_por_empacar      
+         + $this->stock_enviado_full 
+         + ($this->stock_full ?? 0);
+}
     
     /**
      * Calcula el consumo diario promedio
@@ -51,22 +57,24 @@ class Producto extends Model
  * Fórmula: si el stock total < ventas de 15 días, fabricar la diferencia
  * Si no hay datos de ventas, pero el stock es 0, recomendar fabricar un mínimo
  */
-public function getRecomendacionFabricacionAttribute(): int
+
+public function getRecomendacionFabricacionAttribute()
 {
-    // Si no hay ventas registradas
     if (!$this->ventas_30_dias || $this->ventas_30_dias == 0) {
-        // Si el stock es 0, recomendar fabricar un mínimo de 10 unidades
-        if ($this->stock_total == 0) {
-            return 10;
-        }
-        // Si hay stock pero no hay ventas, no recomendar fabricación
         return 0;
     }
     
-    // Cálculo normal cuando hay datos de ventas
-    $consumo15Dias = $this->consumo_diario * 15;
-    $faltante = $consumo15Dias - $this->stock_total;
+    $consumoDiario = $this->ventas_30_dias / 30;
+    $stockParaQuinceDias = $consumoDiario * 15;
+    $stockTotal = $this->stock_bodega 
+                + $this->stock_cortado 
+                + $this->stock_costura          // NUEVO
+                + $this->stock_por_empacar      // NUEVO
+                + $this->stock_enviado_full 
+                + ($this->stock_full ?? 0);
     
-    return max(0, (int) ceil($faltante));
+    $necesario = $stockParaQuinceDias - $stockTotal;
+    
+    return max(0, ceil($necesario));
 }
 }

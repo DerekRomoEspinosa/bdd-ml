@@ -16,12 +16,14 @@ class ProductoController extends Controller
         $this->mlService = $mlService;
     }
 
-    public function index(Request $request)
+public function index(Request $request)
 {
     $buscar = $request->get('buscar');
+    $filtro = $request->get('filtro'); // NUEVO
     
     $query = Producto::where('activo', true);
     
+    // Búsqueda por texto
     if ($buscar) {
         $query->where(function($q) use ($buscar) {
             $q->where('nombre', 'like', "%{$buscar}%")
@@ -30,9 +32,75 @@ class ProductoController extends Controller
         });
     }
     
-    $productos = $query->orderBy('nombre')->get();
+    // NUEVO: Filtros por estado
+    if ($filtro) {
+        switch ($filtro) {
+            case 'criticos':
+                // Productos con menos de 3 días de stock
+                $query->whereRaw('CASE 
+                    WHEN (ventas_30_dias / 30) > 0 
+                    THEN (stock_bodega + stock_cortado + stock_enviado_full + COALESCE(stock_full, 0)) / (ventas_30_dias / 30) < 3
+                    ELSE false 
+                END');
+                break;
+                
+            case 'urgentes':
+                // Productos con menos de 7 días de stock
+                $query->whereRaw('CASE 
+                    WHEN (ventas_30_dias / 30) > 0 
+                    THEN (stock_bodega + stock_cortado + stock_enviado_full + COALESCE(stock_full, 0)) / (ventas_30_dias / 30) < 7
+                    ELSE false 
+                END');
+                break;
+                
+            case 'necesitan_fabricacion':
+                // Productos que necesitan fabricar (cualquier cantidad)
+                $query->whereRaw('GREATEST(
+                    CEILING(((ventas_30_dias / 30) * 15) - (stock_bodega + stock_cortado + stock_enviado_full + COALESCE(stock_full, 0))),
+                    0
+                ) > 0');
+                break;
+                
+            case 'stock_ok':
+                // Productos con stock suficiente
+                $query->whereRaw('GREATEST(
+                    CEILING(((ventas_30_dias / 30) * 15) - (stock_bodega + stock_cortado + stock_enviado_full + COALESCE(stock_full, 0))),
+                    0
+                ) = 0');
+                break;
+        }
+    }
     
-    return view('productos.index', compact('productos'));
+    $productos = $query->orderBy('nombre')->paginate(50)->appends($request->all());
+    
+    // Contar productos por categoría para los badges
+    $contadores = [
+        'todos' => Producto::where('activo', true)->count(),
+        'criticos' => Producto::where('activo', true)
+            ->whereRaw('CASE 
+                WHEN (ventas_30_dias / 30) > 0 
+                THEN (stock_bodega + stock_cortado + stock_enviado_full + COALESCE(stock_full, 0)) / (ventas_30_dias / 30) < 3
+                ELSE false 
+            END')->count(),
+        'urgentes' => Producto::where('activo', true)
+            ->whereRaw('CASE 
+                WHEN (ventas_30_dias / 30) > 0 
+                THEN (stock_bodega + stock_cortado + stock_enviado_full + COALESCE(stock_full, 0)) / (ventas_30_dias / 30) < 7
+                ELSE false 
+            END')->count(),
+        'necesitan_fabricacion' => Producto::where('activo', true)
+            ->whereRaw('GREATEST(
+                CEILING(((ventas_30_dias / 30) * 15) - (stock_bodega + stock_cortado + stock_enviado_full + COALESCE(stock_full, 0))),
+                0
+            ) > 0')->count(),
+        'stock_ok' => Producto::where('activo', true)
+            ->whereRaw('GREATEST(
+                CEILING(((ventas_30_dias / 30) * 15) - (stock_bodega + stock_cortado + stock_enviado_full + COALESCE(stock_full, 0))),
+                0
+            ) = 0')->count(),
+    ];
+    
+    return view('productos.index', compact('productos', 'contadores'));
 }
 
     public function create()
@@ -40,29 +108,29 @@ class ProductoController extends Controller
         return view('productos.create');
     }
 
-    public function store(Request $request)
-    {
-        // Validación con mensajes personalizados
-        $validated = $request->validate([
-            'sku_ml' => 'required|unique:productos|max:255|regex:/^[A-Z0-9\-]+$/',
-            'nombre' => 'required|max:255|min:3',
-            'stock_bodega' => 'nullable|integer|min:0|max:999999',
-            'stock_cortado' => 'nullable|integer|min:0|max:999999',
-            'stock_enviado_full' => 'nullable|integer|min:0|max:999999',
-        ], [
-            'sku_ml.required' => 'El SKU de Mercado Libre es obligatorio',
-            'sku_ml.unique' => 'Este SKU ya existe en el sistema',
-            'sku_ml.regex' => 'El SKU solo puede contener letras mayúsculas, números y guiones',
-            'nombre.required' => 'El nombre del producto es obligatorio',
-            'nombre.min' => 'El nombre debe tener al menos 3 caracteres',
-        ]);
+public function store(Request $request)
+{
+    $validated = $request->validate([
+        'nombre' => 'required|string|max:255',
+        'modelo' => 'nullable|string|max:255',
+        'sku_ml' => 'required|string|max:255|unique:productos',
+        'codigo_interno_ml' => 'nullable|string|max:255',
+        'plantilla_corte_url' => 'nullable|url|max:2000',
+        'stock_bodega' => 'required|integer|min:0',
+        'stock_cortado' => 'required|integer|min:0',
+        'stock_costura' => 'required|integer|min:0',
+        'stock_por_empacar' => 'required|integer|min:0',
+        'stock_enviado_full' => 'required|integer|min:0',
+    ]);
 
-        Producto::create($validated);
-        
-        return redirect()
-            ->route('productos.index')
-            ->with('success', 'Producto creado exitosamente');
-    }
+    $validated['activo'] = true;
+
+    Producto::create($validated);
+
+    return redirect()
+        ->route('productos.index')
+        ->with('success', '✅ Producto creado correctamente');
+}
 
     public function edit(Producto $producto)
     {
@@ -70,24 +138,26 @@ class ProductoController extends Controller
     }
 
     public function update(Request $request, Producto $producto)
-    {
-        // Validación sin permitir cambiar SKU
-        $validated = $request->validate([
-            'nombre' => 'required|max:255|min:3',
-            'stock_bodega' => 'nullable|integer|min:0|max:999999',
-            'stock_cortado' => 'nullable|integer|min:0|max:999999',
-            'stock_enviado_full' => 'nullable|integer|min:0|max:999999',
-        ], [
-            'nombre.required' => 'El nombre del producto es obligatorio',
-            'nombre.min' => 'El nombre debe tener al menos 3 caracteres',
-        ]);
+{
+    $validated = $request->validate([
+        'nombre' => 'required|string|max:255',
+        'modelo' => 'nullable|string|max:255',
+        'sku_ml' => 'required|string|max:255|unique:productos,sku_ml,' . $producto->id,
+        'codigo_interno_ml' => 'nullable|string|max:255',
+        'plantilla_corte_url' => 'nullable|url|max:2000',
+        'stock_bodega' => 'required|integer|min:0',
+        'stock_cortado' => 'required|integer|min:0',
+        'stock_costura' => 'required|integer|min:0',
+        'stock_por_empacar' => 'required|integer|min:0',
+        'stock_enviado_full' => 'required|integer|min:0',
+    ]);
 
-        $producto->update($validated);
-        
-        return redirect()
-            ->route('productos.index')
-            ->with('success', 'Producto actualizado exitosamente');
-    }
+    $producto->update($validated);
+
+    return redirect()
+        ->route('productos.index')
+        ->with('success', '✅ Producto actualizado correctamente');
+}
 
     public function destroy(Producto $producto)
     {

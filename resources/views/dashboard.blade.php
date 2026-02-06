@@ -95,25 +95,7 @@
                             <span class="ml-4 text-sm font-medium text-gray-900">Nuevo Producto</span>
                         </a>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-    <a href="{{ route('productos.create') }}" 
-       class="flex items-center p-4 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 rounded-xl transition-all duration-300 group">
-        <div class="bg-blue-500 rounded-lg p-3 group-hover:scale-110 transition-transform">
-            <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-            </svg>
-        </div>
-        <span class="ml-4 text-sm font-medium text-gray-900">Nuevo Producto</span>
-    </a>
 
-    <a href="{{ route('productos.index') }}" 
-       class="flex items-center p-4 bg-gradient-to-r from-emerald-50 to-green-50 hover:from-emerald-100 hover:to-green-100 rounded-xl transition-all duration-300 group">
-        <div class="bg-emerald-500 rounded-lg p-3 group-hover:scale-110 transition-transform">
-            <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
-            </svg>
-        </div>
-        <span class="ml-4 text-sm font-medium text-gray-900">Ver Todos los Productos</span>
-    </a>
 
     {{-- NUEVO: Sincronizar con ML --}}
     <form action="{{ route('productos.sincronizar-ml-background') }}" method="POST" class="contents">
@@ -161,6 +143,103 @@
                                 {{ $productosNecesitanFabricacion }} productos necesitan atención
                             </span>
                         @endif
+                        {{-- Gráfica de Estado de Stock --}}
+            <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+                <div class="p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-6">Estado General del Stock</h3>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {{-- Gráfica de Dona --}}
+                        <div>
+                            <canvas id="stockChart" style="max-height: 300px;"></canvas>
+                        </div>
+                        
+                        {{-- Estadísticas --}}
+                        <div class="flex flex-col justify-center space-y-4">
+                            <div class="flex items-center justify-between p-4 bg-green-50 rounded-xl">
+                                <div class="flex items-center">
+                                    <div class="w-4 h-4 bg-green-500 rounded-full mr-3"></div>
+                                    <span class="text-sm font-medium text-gray-700">Stock OK</span>
+                                </div>
+                                <span class="text-2xl font-bold text-green-600">
+                                    {{ $totalProductos - $productosNecesitanFabricacion }}
+                                </span>
+                            </div>
+                            
+                            <div class="flex items-center justify-between p-4 bg-red-50 rounded-xl">
+                                <div class="flex items-center">
+                                    <div class="w-4 h-4 bg-red-500 rounded-full mr-3"></div>
+                                    <span class="text-sm font-medium text-gray-700">Necesitan Fabricación</span>
+                                </div>
+                                <span class="text-2xl font-bold text-red-600">
+                                    {{ $productosNecesitanFabricacion }}
+                                </span>
+                            </div>
+                            
+                            <div class="flex items-center justify-between p-4 bg-blue-50 rounded-xl">
+                                <div class="flex items-center">
+                                    <div class="w-4 h-4 bg-blue-500 rounded-full mr-3"></div>
+                                    <span class="text-sm font-medium text-gray-700">Porcentaje OK</span>
+                                </div>
+                                <span class="text-2xl font-bold text-blue-600">
+                                    {{ $totalProductos > 0 ? round((($totalProductos - $productosNecesitanFabricacion) / $totalProductos) * 100, 1) : 0 }}%
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- Script de Chart.js --}}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        const ctx = document.getElementById('stockChart');
+        
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Stock OK', 'Necesitan Fabricación'],
+                datasets: [{
+                    data: [
+                        {{ $totalProductos - $productosNecesitanFabricacion }},
+                        {{ $productosNecesitanFabricacion }}
+                    ],
+                    backgroundColor: [
+                        'rgb(34, 197, 94)',  // verde
+                        'rgb(239, 68, 68)'   // rojo
+                    ],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            font: {
+                                size: 14
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = ((value / total) * 100).toFixed(1);
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    </script>
                     </div>
 
                     @if($productosPrioritarios->isEmpty())
