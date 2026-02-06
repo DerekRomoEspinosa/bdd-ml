@@ -18,7 +18,7 @@ WORKDIR /var/www/html
 
 # PHP deps
 COPY composer.json composer.lock ./
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+RUN composer install --no-dev --no-scripts --optimize-autoloader --no-interaction
 
 # JS deps
 COPY package.json package-lock.json ./
