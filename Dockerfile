@@ -41,8 +41,4 @@ RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cac
 EXPOSE 8000
 
 # Comando de inicio
-CMD php artisan config:cache && \
-    php artisan route:cache && \
-    php artisan view:cache && \
-    php artisan migrate --force && \
-    php artisan serve --host=0.0.0.0 --port=8000
+CMD php artisan migrate --force && php -S 0.0.0.0:$PORT -t public
