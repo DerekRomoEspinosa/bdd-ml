@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class MLAuthController extends Controller
@@ -15,20 +14,13 @@ class MLAuthController extends Controller
         $appId = env('ML_CLIENT_ID');
         $redirectUri = env('ML_REDIRECT_URI');
         
-        \Log::info('ML Redirect', [
-            'app_id' => $appId,
-            'redirect_uri' => $redirectUri
-        ]);
-        
         if (empty($appId) || empty($redirectUri)) {
             return back()->with('error', '❌ Configuración ML incompleta');
         }
         
-        // Generar state para seguridad
         $state = Str::random(40);
         session(['ml_oauth_state' => $state]);
         
-        // Construir URL con todos los parámetros
         $params = http_build_query([
             'response_type' => 'code',
             'client_id' => $appId,
@@ -38,36 +30,33 @@ class MLAuthController extends Controller
         
         $url = "https://auth.mercadolibre.com.mx/authorization?" . $params;
         
-        \Log::info('Redirecting to ML', ['url' => $url]);
-        
         return redirect()->away($url);
     }
 
     public function callback(Request $request)
     {
+        // LOG INMEDIATO - ANTES DE CUALQUIER COSA
+        \Log::info('========================================');
+        \Log::info('ML CALLBACK EJECUTÁNDOSE');
+        \Log::info('========================================');
+        
         $code = $request->query('code');
         $state = $request->query('state');
         
-        \Log::info('ML Callback', [
+        \Log::info('Callback params', [
             'has_code' => !empty($code),
+            'code_start' => $code ? substr($code, 0, 20) . '...' : 'null',
             'has_state' => !empty($state),
-            'state_matches' => $state === session('ml_oauth_state')
         ]);
 
         if (!$code) {
-            \Log::error('No code received');
-            return redirect()->route('dashboard')
-                ->with('error', '❌ No se recibió código de autorización');
-        }
-
-        // Verificar state (opcional pero recomendado)
-        if ($state && $state !== session('ml_oauth_state')) {
-            \Log::error('State mismatch');
-            return redirect()->route('dashboard')
-                ->with('error', '❌ Error de seguridad (state mismatch)');
+            \Log::error('❌ No code received');
+            return redirect('/dashboard')->with('error', '❌ No se recibió código');
         }
 
         try {
+            \Log::info('Requesting token from ML...');
+            
             $response = Http::asForm()->post('https://api.mercadolibre.com/oauth/token', [
                 'grant_type' => 'authorization_code',
                 'client_id' => env('ML_CLIENT_ID'),
@@ -76,24 +65,27 @@ class MLAuthController extends Controller
                 'redirect_uri' => env('ML_REDIRECT_URI'),
             ]);
 
-            \Log::info('Token response', [
+            \Log::info('ML response received', [
                 'status' => $response->status(),
-                'success' => $response->successful()
+                'successful' => $response->successful()
             ]);
 
             if (!$response->successful()) {
-                \Log::error('Token error', ['body' => $response->body()]);
-                return redirect()->route('dashboard')
-                    ->with('error', '❌ Error obteniendo token: ' . $response->status());
+                \Log::error('Token request failed', [
+                    'status' => $response->status(),
+                    'body' => $response->body()
+                ]);
+                return redirect('/dashboard')->with('error', '❌ Error: ' . $response->status());
             }
 
             $data = $response->json();
             
             if (!isset($data['access_token'])) {
-                \Log::error('No access token in response');
-                return redirect()->route('dashboard')
-                    ->with('error', '❌ Token no recibido');
+                \Log::error('No access_token in response');
+                return redirect('/dashboard')->with('error', '❌ Token no recibido');
             }
+            
+            \Log::info('Saving token to database...');
             
             DB::table('mercadolibre_tokens')->updateOrInsert(
                 ['id' => 1],
@@ -106,19 +98,20 @@ class MLAuthController extends Controller
                 ]
             );
 
-            \Log::info('✅ Token saved successfully');
+            \Log::info('✅✅✅ TOKEN GUARDADO EXITOSAMENTE ✅✅✅');
             
-            // Limpiar state de sesión
             session()->forget('ml_oauth_state');
 
-            return redirect()->route('dashboard')
-                ->with('success', '✅ Mercado Libre vinculado correctamente');
+            return redirect('/dashboard')->with('success', '✅ Mercado Libre vinculado correctamente');
 
         } catch (\Exception $e) {
-            \Log::error('Callback exception', ['error' => $e->getMessage()]);
+            \Log::error('❌❌❌ CALLBACK EXCEPTION ❌❌❌', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
             
-            return redirect()->route('dashboard')
-                ->with('error', '❌ Error: ' . $e->getMessage());
+            return redirect('/dashboard')->with('error', '❌ Error: ' . $e->getMessage());
         }
     }
 }
