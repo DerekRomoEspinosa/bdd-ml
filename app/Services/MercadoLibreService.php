@@ -3,43 +3,55 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class MercadoLibreService
 {
     private string $baseUrl = 'https://api.mercadolibre.com';
-    private ?string $accessToken;
 
-    public function __construct()
+    private function getToken()
     {
-        // Importante: jalar el token desde la config corregida
-        $this->accessToken = config('services.mercadolibre.token');
-    }
+        $tokenData = DB::table('mercadolibre_tokens')->find(1);
+        if (!$tokenData) return null;
 
-    private function getHeaders(): array
-    {
-        return [
-            'Accept' => 'application/json',
-            'Content-Type' => 'application/json',
-        ];
-    }
-
-    private function makeRequest(string $method, string $url, array $options = [])
-    {
-        $request = Http::withHeaders($this->getHeaders())->timeout(15);
-
-        if ($this->accessToken) {
-            $request->withToken($this->accessToken);
+        // Si el token tiene más de 5 horas, lo refrescamos (duran 6)
+        if (now()->diffInHours($tokenData->updated_at) >= 5) {
+            return $this->refreshToken($tokenData->refresh_token);
         }
 
-        return $request->$method($url, $options);
+        return $tokenData->access_token;
+    }
+
+    private function refreshToken($refreshToken)
+    {
+        $response = Http::asForm()->post("{$this->baseUrl}/oauth/token", [
+            'grant_type' => 'refresh_token',
+            'client_id' => config('services.mercadolibre.app_id'),
+            'client_secret' => config('services.mercadolibre.secret_key'),
+            'refresh_token' => $refreshToken,
+        ]);
+
+        if ($response->successful()) {
+            $data = $response->json();
+            DB::table('mercadolibre_tokens')->where('id', 1)->update([
+                'access_token' => $data['access_token'],
+                'refresh_token' => $data['refresh_token'],
+                'updated_at' => now(),
+            ]);
+            return $data['access_token'];
+        }
+        return null;
     }
 
     public function sincronizarProducto(string $itemId): array
     {
-        try {
-            $response = $this->makeRequest('get', "{$this->baseUrl}/items/{$itemId}");
+        $token = $this->getToken();
+        if (!$token) return ['stock_full' => 0, 'ventas_30_dias' => 0];
 
+        try {
+            $response = Http::withToken($token)->get("{$this->baseUrl}/items/{$itemId}");
+            
             if ($response->successful()) {
                 $data = $response->json();
                 return [
@@ -48,17 +60,10 @@ class MercadoLibreService
                     'sincronizado_en' => now(),
                 ];
             }
-
-            Log::error("ML API Error: " . $response->status() . " para el item " . $itemId);
         } catch (\Exception $e) {
-            Log::error("Excepción en ML Service: " . $e->getMessage());
+            Log::error("Error Sync ML: " . $e->getMessage());
         }
 
-        // Si falla, retornamos valores en 0 para no romper la vista
-        return [
-            'stock_full' => 0,
-            'ventas_30_dias' => 0,
-            'sincronizado_en' => now(),
-        ];
+        return ['stock_full' => 0, 'ventas_30_dias' => 0];
     }
 }

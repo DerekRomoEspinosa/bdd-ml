@@ -3,7 +3,9 @@
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\ExcelController;
+use App\Http\Controllers\MLAuthController;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\DB;
 
 Route::get('/', function () {
     return view('welcome');
@@ -39,13 +41,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // CRUD de Productos
     Route::resource('productos', ProductoController::class);
     
-    // Sincronización con Mercado Libre (Manual y Background)
+    // Autenticación Mercado Libre (OAuth)
+    Route::get('auth/mercadolibre', [MLAuthController::class, 'redirectToML'])->name('ml.login');
+    Route::get('auth/mercadolibre/callback', [MLAuthController::class, 'callback'])->name('ml.callback');
+    
+    // Sincronización con Mercado Libre
     Route::post('productos/{producto}/sincronizar', [ProductoController::class, 'sincronizar'])->name('productos.sincronizar');
     Route::post('productos/sincronizar-todos', [ProductoController::class, 'sincronizarTodos'])->name('productos.sincronizar-todos');
     Route::post('productos/sincronizar-ml-background', function () {
         \App\Jobs\SincronizarProductosMLMaestro::dispatch();
         return redirect()->route('dashboard')
-            ->with('success', '🚀 Sincronización iniciada en segundo plano. Monitorea storage/logs/laravel.log');
+            ->with('success', '🚀 Sincronización iniciada en segundo plano.');
     })->name('productos.sincronizar-ml-background');
 
     // Importación y Exportación Excel
