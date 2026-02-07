@@ -11,29 +11,25 @@ class MLAuthController extends Controller
 {
     public function redirectToML()
     {
-        // DEBUG: Ver qué valores tiene config
-        $appId = config('services.mercadolibre.app_id');
-        $redirectUri = config('services.mercadolibre.redirect_uri');
+        // Leer directamente de env() en lugar de config()
+        $appId = env('ML_CLIENT_ID');
+        $redirectUri = env('ML_REDIRECT_URI');
         
         Log::info('=== REDIRECT TO ML DEBUG ===', [
             'app_id' => $appId,
             'redirect_uri' => $redirectUri,
-            'env_ML_CLIENT_ID' => env('ML_CLIENT_ID'),
-            'env_ML_REDIRECT_URI' => env('ML_REDIRECT_URI'),
-            'config_loaded' => config('services.mercadolibre'),
         ]);
         
-        // Si no hay app_id, mostrar error
         if (empty($appId)) {
             Log::error('ML App ID is empty!');
             return redirect()->route('dashboard')
-                ->with('error', '❌ Error: Configuración de Mercado Libre incompleta. App ID: ' . $appId);
+                ->with('error', '❌ Error: ML_CLIENT_ID no está configurado');
         }
         
         if (empty($redirectUri)) {
             Log::error('ML Redirect URI is empty!');
             return redirect()->route('dashboard')
-                ->with('error', '❌ Error: Configuración de Mercado Libre incompleta. Redirect URI vacío.');
+                ->with('error', '❌ Error: ML_REDIRECT_URI no está configurado');
         }
         
         $url = "https://auth.mercadolibre.com.mx/authorization?response_type=code&client_id={$appId}&redirect_uri={$redirectUri}";
@@ -47,10 +43,8 @@ class MLAuthController extends Controller
     {
         $code = $request->query('code');
 
-        Log::info('=== ML CALLBACK DEBUG ===', [
-            'code' => $code ? substr($code, 0, 20) . '...' : 'missing',
-            'full_url' => $request->fullUrl(),
-            'all_query' => $request->query()
+        Log::info('=== ML CALLBACK ===', [
+            'has_code' => !empty($code),
         ]);
 
         if (!$code) {
@@ -60,15 +54,9 @@ class MLAuthController extends Controller
         }
 
         try {
-            $clientId = config('services.mercadolibre.app_id');
-            $clientSecret = config('services.mercadolibre.secret_key');
-            $redirectUri = config('services.mercadolibre.redirect_uri');
-            
-            Log::info('ML Token Request Config', [
-                'has_client_id' => !empty($clientId),
-                'has_client_secret' => !empty($clientSecret),
-                'redirect_uri' => $redirectUri
-            ]);
+            $clientId = env('ML_CLIENT_ID');
+            $clientSecret = env('ML_CLIENT_SECRET');
+            $redirectUri = env('ML_REDIRECT_URI');
             
             $response = Http::asForm()->post('https://api.mercadolibre.com/oauth/token', [
                 'grant_type' => 'authorization_code',
@@ -81,20 +69,13 @@ class MLAuthController extends Controller
             Log::info('ML Token Response', [
                 'status' => $response->status(),
                 'success' => $response->successful(),
-                'has_body' => !empty($response->body())
             ]);
 
             if ($response->successful()) {
                 $data = $response->json();
                 
-                Log::info('ML Token Data', [
-                    'has_access_token' => isset($data['access_token']),
-                    'has_refresh_token' => isset($data['refresh_token']),
-                    'access_token_length' => isset($data['access_token']) ? strlen($data['access_token']) : 0
-                ]);
-                
                 if (!isset($data['access_token'])) {
-                    Log::error('ML Token Response missing access_token', ['data' => $data]);
+                    Log::error('ML Token Response missing access_token');
                     return redirect()->route('dashboard')
                         ->with('error', '❌ Respuesta inválida de Mercado Libre.');
                 }
@@ -111,8 +92,6 @@ class MLAuthController extends Controller
                     $tokenData['created_at'] = now();
                 }
                 
-                Log::info('Saving ML Token to database...');
-                
                 DB::table('mercadolibre_tokens')->updateOrInsert(
                     ['id' => 1],
                     $tokenData
@@ -126,17 +105,14 @@ class MLAuthController extends Controller
 
             Log::error('ML Token request failed', [
                 'status' => $response->status(),
-                'body' => $response->body()
             ]);
             
             return redirect()->route('dashboard')
-                ->with('error', '❌ Error al obtener token de ML. Status: ' . $response->status());
+                ->with('error', '❌ Error al obtener token. Status: ' . $response->status());
 
         } catch (\Exception $e) {
             Log::error('ML Callback Exception', [
                 'message' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine()
             ]);
             
             return redirect()->route('dashboard')
