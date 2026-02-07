@@ -41,12 +41,10 @@ return [
     |--------------------------------------------------------------------------
     */
     'mercadolibre' => [
-        'app_id'       => env('MERCADOLIBRE_APP_ID'),
-        'secret_key'   => env('MERCADOLIBRE_SECRET_KEY'),
-        'redirect_uri' => env('MERCADOLIBRE_REDIRECT_URI'),
-        // Este campo es crucial para que el MercadoLibreService 
-        // pueda autenticar las peticiones en el servidor.
-        'token'        => env('MERCADOLIBRE_ACCESS_TOKEN'), 
+        'app_id' => env('ML_CLIENT_ID'),
+        'secret_key' => env('ML_CLIENT_SECRET'),
+        'redirect_uri' => env('ML_REDIRECT_URI'),
+        'api_url' => env('ML_API_URL', 'https://api.mercadolibre.com'),
     ],
 
 ];
