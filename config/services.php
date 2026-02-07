@@ -35,11 +35,18 @@ return [
         ],
     ],
 
-    // Mercado Libre API
+    /*
+    |--------------------------------------------------------------------------
+    | Mercado Libre API Configuration
+    |--------------------------------------------------------------------------
+    */
     'mercadolibre' => [
-        'app_id' => env('MERCADOLIBRE_APP_ID'),
-        'secret_key' => env('MERCADOLIBRE_SECRET_KEY'),
+        'app_id'       => env('MERCADOLIBRE_APP_ID'),
+        'secret_key'   => env('MERCADOLIBRE_SECRET_KEY'),
         'redirect_uri' => env('MERCADOLIBRE_REDIRECT_URI'),
+        // Este campo es crucial para que el MercadoLibreService 
+        // pueda autenticar las peticiones en el servidor.
+        'token'        => env('MERCADOLIBRE_ACCESS_TOKEN'), 
     ],
 
 ];
