@@ -5,44 +5,90 @@ namespace App\Services;
 use App\Models\Producto;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class ExcelImportService
 {
+    /**
+     * Importar productos desde Excel
+     * Basado en la estructura del archivo de Carlos
+     */
     public function importarProductos(string $filePath): array
     {
         $spreadsheet = IOFactory::load($filePath);
         $worksheet = $spreadsheet->getActiveSheet();
         $highestRow = $worksheet->getHighestRow();
         
-        $importados = 0; $actualizados = 0; $errores = 0;
+        $importados = 0;
+        $actualizados = 0;
+        $errores = 0;
+        $erroresDetalle = [];
 
+        // Iniciar desde fila 2 (la 1 son encabezados)
         for ($row = 2; $row <= $highestRow; $row++) {
             try {
-                $modelo = $this->getCellValue($worksheet, 'A', $row);
-                if (empty($modelo)) continue;
-
-                // Mapeo exacto basado en tu imagen de 13 columnas
-                $data = [
-                    'nombre'              => $this->getCellValue($worksheet, 'B', $row),
-                    'sku_ml'              => $this->getCellValue($worksheet, 'C', $row),
-                    'codigo_interno_ml'   => $this->getCellValue($worksheet, 'D', $row),
-                    'stock_bodega'        => (int)$this->getCellValue($worksheet, 'E', $row),
-                    'stock_cortado'       => (int)$this->getCellValue($worksheet, 'F', $row),
-                    'stock_costura'       => (int)$this->getCellValue($worksheet, 'G', $row),
-                    'stock_por_empacar'   => (int)$this->getCellValue($worksheet, 'H', $row),
-                    'stock_enviado_full'  => (int)$this->getCellValue($worksheet, 'I', $row),
-                    'plantilla_corte_url' => $this->getCellValue($worksheet, 'M', $row), // Columna M es la 13
-                    'activo'              => true,
-                ];
-
-                // updateOrCreate es más limpio: busca por modelo, si existe actualiza, si no crea.
-                $producto = Producto::updateOrCreate(['modelo' => $modelo], $data);
+                // Leer datos de las columnas importantes (Estructura de Carlos)
+                $modelo = $this->getCellValue($worksheet, 'A', $row); // Modelo
+                $nombre = $this->getCellValue($worksheet, 'C', $row); // Nombre Genérico
+                $skuMl = $this->getCellValue($worksheet, 'AS', $row); // Código interno ML (columna 45)
                 
-                $producto->wasRecentlyCreated ? $importados++ : $actualizados++;
+                // Inventario interno
+                $stockCortado = (int) $this->getCellValue($worksheet, 'Y', $row); // Cortado
+                $stockBodega = (int) $this->getCellValue($worksheet, 'AB', $row); // Stock almacén (columna 28)
+                $stockEnviadoFull = (int) $this->getCellValue($worksheet, 'AD', $row); // Proceso envío Full (columna 30)
+                
+                // Validar datos mínimos
+                if (empty($modelo) && empty($nombre)) {
+                    continue; // Fila vacía, saltar
+                }
+                
+                if (empty($skuMl)) {
+                    // Si no tiene SKU de ML, usar el modelo como SKU temporal
+                    $skuMl = $modelo ?: 'TEMP-' . $row;
+                }
+                
+                if (empty($nombre)) {
+                    $nombre = $modelo ?: 'Producto sin nombre';
+                }
+
+                // Buscar si el producto ya existe (por SKU o por modelo)
+                $producto = Producto::where('sku_ml', $skuMl)
+                    ->orWhere('modelo', $modelo)
+                    ->first();
+
+                if ($producto) {
+                    // Actualizar producto existente
+                    $producto->update([
+                        'modelo' => $modelo,
+                        'nombre' => $nombre,
+                        'sku_ml' => $skuMl,
+                        'stock_bodega' => $stockBodega,
+                        'stock_cortado' => $stockCortado,
+                        'stock_enviado_full' => $stockEnviadoFull,
+                        'activo' => true,
+                    ]);
+                    $actualizados++;
+                } else {
+                    // Crear nuevo producto
+                    Producto::create([
+                        'modelo' => $modelo,
+                        'nombre' => $nombre,
+                        'sku_ml' => $skuMl,
+                        'stock_bodega' => $stockBodega,
+                        'stock_cortado' => $stockCortado,
+                        'stock_enviado_full' => $stockEnviadoFull,
+                        'activo' => true,
+                    ]);
+                    $importados++;
+                }
 
             } catch (\Exception $e) {
                 $errores++;
-                Log::error("Error fila {$row}: " . $e->getMessage());
+                $erroresDetalle[] = "Fila {$row}: " . $e->getMessage();
+                Log::error("Error importando fila {$row}", [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ]);
             }
         }
 
@@ -50,12 +96,22 @@ class ExcelImportService
             'importados' => $importados,
             'actualizados' => $actualizados,
             'errores' => $errores,
+            'errores_detalle' => $erroresDetalle,
+            'total_procesado' => $importados + $actualizados,
         ];
     }
 
+    /**
+     * Obtener valor de celda de forma segura
+     */
     private function getCellValue($worksheet, string $column, int $row): ?string
     {
         $value = $worksheet->getCell($column . $row)->getValue();
-        return $value === null ? null : trim((string) $value);
+        
+        if ($value === null || $value === '') {
+            return null;
+        }
+        
+        return trim((string) $value);
     }
 }
