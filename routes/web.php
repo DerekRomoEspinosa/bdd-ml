@@ -11,6 +11,9 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+// CALLBACK DE MERCADO LIBRE - FUERA DEL MIDDLEWARE AUTH
+Route::get('mercadolibre/callback', [MLAuthController::class, 'callback'])->name('ml.callback');
+
 // Todas las rutas protegidas por autenticación
 Route::middleware(['auth', 'verified'])->group(function () {
     
@@ -41,9 +44,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // CRUD de Productos
     Route::resource('productos', ProductoController::class);
     
-    // Autenticación Mercado Libre (OAuth) - CORREGIDO
+    // Autenticación Mercado Libre (OAuth) - SOLO AUTH
     Route::get('mercadolibre/auth', [MLAuthController::class, 'redirectToML'])->name('ml.login');
-    Route::get('mercadolibre/callback', [MLAuthController::class, 'callback'])->name('ml.callback');
     
     // Sincronización con Mercado Libre
     Route::post('productos/{producto}/sincronizar', [ProductoController::class, 'sincronizar'])->name('productos.sincronizar');
