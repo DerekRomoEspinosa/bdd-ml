@@ -228,75 +228,77 @@ class ProductoController extends Controller
      * Sincronizar todos los productos activos
      * ✨ Usa codigo_interno_ml
      */
-    public function sincronizarTodos()
-    {
-        set_time_limit(300); // 5 minutos
-        
-        try {
-            $sincronizados = 0;
-            $errores = 0;
-            $sinCodigo = 0;
-            $lote = 100;
+public function sincronizarTodos()
+{
+    set_time_limit(300); // 5 minutos
+    
+    try {
+        $sincronizados = 0;
+        $errores = 0;
+        $sinCodigo = 0;
+        $lote = 50; // Reducir a 50 para evitar timeouts
 
-            // Procesar en lotes
-            Producto::where('activo', true)
-                ->chunk($lote, function($productos) use (&$sincronizados, &$errores, &$sinCodigo) {
-                    foreach ($productos as $producto) {
-                        try {
-                            if (!$producto->codigo_interno_ml) {
-                                $sinCodigo++;
-                                Log::warning("[Sync Todos] Sin código: {$producto->id}");
-                                continue;
-                            }
-                            
-                            $datos = $this->mlService->sincronizarProducto($producto->codigo_interno_ml);
-                            
-                            $producto->update([
-                                'stock_full' => $datos['stock_full'],
-                                'ventas_30_dias' => $datos['ventas_30_dias'],
-                                'ml_ultimo_sync' => $datos['sincronizado_en'],
-                            ]);
-                            
-                            $sincronizados++;
-                            
-                            // Pausa de 200ms entre productos
-                            usleep(200000);
-                            
-                        } catch (\Exception $e) {
-                            $errores++;
-                            Log::error("[Sync Todos] Error en {$producto->id}: {$e->getMessage()}");
+        // Procesar en lotes
+        Producto::where('activo', true)
+            ->chunk($lote, function($productos) use (&$sincronizados, &$errores, &$sinCodigo) {
+                foreach ($productos as $producto) {
+                    try {
+                        if (!$producto->codigo_interno_ml) {
+                            $sinCodigo++;
+                            Log::warning("[Sync Todos] Producto {$producto->id} sin código");
+                            continue;
                         }
+                        
+                        // ✨ NUEVA INSTANCIA EN CADA ITERACIÓN
+                        $mlService = new MercadoLibreService();
+                        
+                        Log::info("[Sync Todos] Sincronizando producto {$producto->id} con código {$producto->codigo_interno_ml}");
+                        
+                        $datos = $mlService->sincronizarProducto($producto->codigo_interno_ml);
+                        
+                        $producto->update([
+                            'stock_full' => $datos['stock_full'],
+                            'ventas_30_dias' => $datos['ventas_30_dias'],
+                            'ml_ultimo_sync' => $datos['sincronizado_en'],
+                        ]);
+                        
+                        $sincronizados++;
+                        
+                        Log::info("[Sync Todos] ✓ Producto {$producto->id} - Stock: {$datos['stock_full']}, Ventas: {$datos['ventas_30_dias']}");
+                        
+                        // Pausa de 500ms entre productos
+                        usleep(500000);
+                        
+                    } catch (\Exception $e) {
+                        $errores++;
+                        Log::error("[Sync Todos] ✗ Error en producto {$producto->id}: {$e->getMessage()}");
                     }
-                });
+                }
+            });
 
-            $totalProductos = Producto::where('activo', true)->count();
-            $mensaje = "✅ Sincronizados: {$sincronizados}/{$totalProductos}";
-            
-            if ($errores > 0) {
-                $mensaje .= " | ⚠️ Errores: {$errores}";
-            }
-            
-            if ($sinCodigo > 0) {
-                $mensaje .= " | ℹ️ Sin código: {$sinCodigo}";
-            }
-
-            Log::info("[Sync Todos] Completado", [
-                'total' => $totalProductos,
-                'sincronizados' => $sincronizados,
-                'errores' => $errores,
-                'sin_codigo' => $sinCodigo
-            ]);
-
-            return redirect()
-                ->route('productos.index')
-                ->with('success', $mensaje);
-
-        } catch (\Exception $e) {
-            Log::error("[Sync Todos] Error general: {$e->getMessage()}");
-            
-            return redirect()
-                ->route('productos.index')
-                ->with('error', '❌ Error: ' . $e->getMessage());
+        $totalProductos = Producto::where('activo', true)->count();
+        $mensaje = "✅ Sincronizados: {$sincronizados}/{$totalProductos}";
+        
+        if ($errores > 0) {
+            $mensaje .= " | ⚠️ Errores: {$errores}";
         }
+        
+        if ($sinCodigo > 0) {
+            $mensaje .= " | ℹ️ Sin código: {$sinCodigo}";
+        }
+
+        Log::info("[Sync Todos] Completado - Total: {$totalProductos}, Sincronizados: {$sincronizados}, Errores: {$errores}, Sin código: {$sinCodigo}");
+
+        return redirect()
+            ->route('productos.index')
+            ->with('success', $mensaje);
+
+    } catch (\Exception $e) {
+        Log::error("[Sync Todos] Error general: {$e->getMessage()}");
+        
+        return redirect()
+            ->route('productos.index')
+            ->with('error', '❌ Error: ' . $e->getMessage());
     }
+}
 }
