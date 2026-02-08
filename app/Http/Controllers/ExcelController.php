@@ -39,9 +39,9 @@ class ExcelController extends Controller
 
         // Encabezados para que coincidan con la importación
         $headers = [
-            'Modelo', 'Nombre', 'SKU ML', 'Cod Interno', 'Bodega', 
-            'Cortado', 'Costura', 'Empacar', 'Enviado Full', 
-            'Stock Full', 'Ventas 30d', 'Stock Total', 'Plantilla URL'
+            'Modelo', 'Nombre', 'SKU ML', 'Codigo Interno', 'Stock Bodega', 
+            'Stock Cortado', 'Stock Costura', 'Por Empacar', 'Enviado Full', 
+            'Stock Full', 'Ventas 30d', 'Stock Total', 'Plantilla Corte'
         ];
         $sheet->fromArray($headers, NULL, 'A1');
 

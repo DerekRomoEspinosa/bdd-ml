@@ -92,69 +92,121 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('productos.sincronizar-ml-background');
 
     // ============================================
-    // SINCRONIZACIÓN DIRECTA (SIN JOBS) - NUEVA
+    // SINCRONIZACIÓN DIRECTA (SIN JOBS) - MEJORADA
     // ============================================
     Route::post('productos/sync-ml-directo', function () {
         try {
             $inicio = now();
             
-            Log::info("🎯 Sincronización directa iniciada");
+            Log::info("🎯 [Sync Directo] Iniciando sincronización");
             
             // Verificar token
             $token = DB::table('mercadolibre_tokens')->find(1);
             if (!$token) {
+                Log::error("[Sync Directo] No hay token");
                 return redirect()->route('dashboard')
                     ->with('error', '❌ No hay token de ML. Vincula tu cuenta primero.');
             }
             
+            Log::info("[Sync Directo] Token encontrado");
+            
+            // Obtener columnas disponibles
+            $columnas = DB::select("SHOW COLUMNS FROM productos");
+            $nombresColumnas = array_map(fn($col) => $col->Field, $columnas);
+            
+            Log::info("[Sync Directo] Columnas disponibles: " . implode(', ', $nombresColumnas));
+            
             // Obtener servicio
             $mlService = new \App\Services\MercadoLibreService();
             
-            // Obtener productos con ml_item_id
-            $productos = \App\Models\Producto::where('activo', true)
-                ->whereNotNull('ml_item_id')
-                ->where('ml_item_id', '!=', '')
-                ->limit(50) // Limitar a 50 por seguridad
-                ->get();
+            // Construir query dinámicamente según las columnas disponibles
+            $productos = \App\Models\Producto::where('activo', true);
             
-            if ($productos->isEmpty()) {
+            if (in_array('ml_item_id', $nombresColumnas)) {
+                $productos->where(function($query) {
+                    $query->whereNotNull('ml_item_id')
+                          ->where('ml_item_id', '!=', '');
+                });
+            } elseif (in_array('sku_ml', $nombresColumnas)) {
+                $productos->where(function($query) {
+                    $query->whereNotNull('sku_ml')
+                          ->where('sku_ml', '!=', '');
+                });
+            } else {
+                Log::error("[Sync Directo] No hay columna ml_item_id ni sku_ml");
                 return redirect()->route('dashboard')
-                    ->with('warning', '⚠️ No hay productos con ID de Mercado Libre para sincronizar.');
+                    ->with('error', '❌ La tabla productos no tiene columna para IDs de Mercado Libre.');
             }
             
-            Log::info("📊 Productos a sincronizar: " . $productos->count());
+            $productos = $productos->limit(50)->get();
+            
+            if ($productos->isEmpty()) {
+                Log::warning("[Sync Directo] No hay productos con ML ID");
+                return redirect()->route('dashboard')
+                    ->with('warning', '⚠️ No hay productos con ID de Mercado Libre. Debes agregar los IDs primero.');
+            }
+            
+            Log::info("[Sync Directo] Productos encontrados: " . $productos->count());
             
             $sincronizados = 0;
             $errores = 0;
+            $sinId = 0;
             
             foreach ($productos as $producto) {
+                // Determinar qué ID usar
+                $mlId = null;
+                if (in_array('ml_item_id', $nombresColumnas) && !empty($producto->ml_item_id)) {
+                    $mlId = $producto->ml_item_id;
+                } elseif (in_array('sku_ml', $nombresColumnas) && !empty($producto->sku_ml)) {
+                    $mlId = $producto->sku_ml;
+                }
+                
+                if (!$mlId) {
+                    $sinId++;
+                    Log::warning("[Sync Directo] Producto ID {$producto->id} sin ML ID");
+                    continue;
+                }
+                
                 try {
-                    Log::info("  → Sincronizando: {$producto->ml_item_id}");
+                    Log::info("[Sync Directo] Sincronizando: {$mlId}");
                     
-                    $datos = $mlService->sincronizarProducto($producto->ml_item_id);
+                    $datos = $mlService->sincronizarProducto($mlId);
                     
-                    $producto->update([
-                        'stock_full' => $datos['stock_full'],
-                        'ventas_30_dias' => $datos['ventas_30_dias'],
-                        'sincronizado_en' => $datos['sincronizado_en'],
-                    ]);
+                    // Actualizar solo las columnas que existen
+                    $updateData = [];
+                    if (in_array('stock_full', $nombresColumnas)) {
+                        $updateData['stock_full'] = $datos['stock_full'];
+                    }
+                    if (in_array('ventas_30_dias', $nombresColumnas)) {
+                        $updateData['ventas_30_dias'] = $datos['ventas_30_dias'];
+                    }
+                    if (in_array('sincronizado_en', $nombresColumnas)) {
+                        $updateData['sincronizado_en'] = $datos['sincronizado_en'];
+                    }
+                    
+                    if (!empty($updateData)) {
+                        $producto->update($updateData);
+                    }
                     
                     $sincronizados++;
                     
-                    // Pausa de 200ms entre productos para no saturar la API
-                    usleep(200000);
+                    Log::info("[Sync Directo] ✓ {$mlId} - Stock: {$datos['stock_full']}, Ventas: {$datos['ventas_30_dias']}");
+                    
+                    // Pausa de 300ms entre productos
+                    usleep(300000);
                     
                 } catch (\Exception $e) {
                     $errores++;
-                    Log::error("  ✗ Error en {$producto->ml_item_id}: " . $e->getMessage());
+                    Log::error("[Sync Directo] ✗ Error en {$mlId}: " . $e->getMessage());
                 }
             }
             
             $tiempoTotal = $inicio->diffInSeconds(now());
             
-            Log::info("✅ Sincronización completada", [
+            Log::info("[Sync Directo] ✅ Completado", [
                 'sincronizados' => $sincronizados,
                 'errores' => $errores,
+                'sin_id' => $sinId,
                 'tiempo_segundos' => $tiempoTotal
             ]);
             
@@ -162,12 +214,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
             if ($errores > 0) {
                 $mensaje .= " | ⚠️ Errores: {$errores}";
             }
-            $mensaje .= " | ⏱️ Tiempo: {$tiempoTotal}s";
+            if ($sinId > 0) {
+                $mensaje .= " | ℹ️ Sin ML ID: {$sinId}";
+            }
+            $mensaje .= " | ⏱️ {$tiempoTotal}s";
             
-            return redirect()->route('dashboard')->with('success', $mensaje);
+            return redirect()->route('dashboard')
+                ->with('success', $mensaje);
             
         } catch (\Exception $e) {
-            Log::error('[Sync Directo] Error: ' . $e->getMessage());
+            Log::error('[Sync Directo] ❌ Excepción: ' . $e->getMessage());
+            Log::error('[Sync Directo] Trace: ' . $e->getTraceAsString());
+            
             return redirect()->route('dashboard')
                 ->with('error', '❌ Error: ' . $e->getMessage());
         }
@@ -214,16 +272,52 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return response()->json($data, 200, [], JSON_PRETTY_PRINT);
     })->name('test.ml');
     
-    // Ver productos con ML ID
+    // Ver productos con ML ID - CORREGIDO
     Route::get('/debug-ml-products', function () {
-        $productos = \App\Models\Producto::where('activo', true)
-            ->whereNotNull('ml_item_id')
-            ->where('ml_item_id', '!=', '')
-            ->select('id', 'sku', 'nombre', 'ml_item_id', 'stock_full', 'ventas_30_dias', 'sincronizado_en')
-            ->get();
+        // Primero, ver qué columnas tiene la tabla
+        $columnas = DB::select("SHOW COLUMNS FROM productos");
+        $nombresColumnas = array_map(fn($col) => $col->Field, $columnas);
+        
+        // Seleccionar solo las columnas que existen
+        $selectFields = ['id', 'nombre'];
+        
+        // Agregar columnas opcionales si existen
+        if (in_array('sku', $nombresColumnas)) $selectFields[] = 'sku';
+        if (in_array('sku_ml', $nombresColumnas)) $selectFields[] = 'sku_ml';
+        if (in_array('ml_item_id', $nombresColumnas)) $selectFields[] = 'ml_item_id';
+        if (in_array('stock_full', $nombresColumnas)) $selectFields[] = 'stock_full';
+        if (in_array('ventas_30_dias', $nombresColumnas)) $selectFields[] = 'ventas_30_dias';
+        if (in_array('sincronizado_en', $nombresColumnas)) $selectFields[] = 'sincronizado_en';
+        if (in_array('activo', $nombresColumnas)) $selectFields[] = 'activo';
+        
+        // Construir query dinámicamente
+        $query = \App\Models\Producto::select($selectFields);
+        
+        if (in_array('activo', $nombresColumnas)) {
+            $query->where('activo', true);
+        }
+        
+        // Filtrar por ml_item_id o sku_ml
+        if (in_array('ml_item_id', $nombresColumnas)) {
+            $query->where(function($q) {
+                $q->whereNotNull('ml_item_id')->where('ml_item_id', '!=', '');
+            });
+        } elseif (in_array('sku_ml', $nombresColumnas)) {
+            $query->where(function($q) {
+                $q->whereNotNull('sku_ml')->where('sku_ml', '!=', '');
+            });
+        }
+        
+        $productos = $query->get();
+        
+        $totalActivos = \App\Models\Producto::query();
+        if (in_array('activo', $nombresColumnas)) {
+            $totalActivos->where('activo', true);
+        }
         
         return response()->json([
-            'total_productos_activos' => \App\Models\Producto::where('activo', true)->count(),
+            'columnas_disponibles' => $nombresColumnas,
+            'total_productos_activos' => $totalActivos->count(),
             'total_con_ml_id' => $productos->count(),
             'productos' => $productos
         ], 200, [], JSON_PRETTY_PRINT);
