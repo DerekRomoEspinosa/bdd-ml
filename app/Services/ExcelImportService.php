@@ -30,8 +30,9 @@ class ExcelImportService
                 // Leer datos de las columnas importantes (Estructura de Carlos)
                 $modelo = $this->getCellValue($worksheet, 'A', $row); // Modelo
                 $nombre = $this->getCellValue($worksheet, 'C', $row); // Nombre Genérico
+                $plantillaCorteUrl = $this->getCellValue($worksheet, 'U', $row); // ✨ NUEVO: Plantilla de corte (columna U)
                 $skuMl = $this->getCellValue($worksheet, 'AS', $row); // SKU ML (columna AS)
-                $codigoInternoMl = $this->getCellValue($worksheet, 'AY', $row); // ✨ NUEVO: Código interno ML (columna AY)
+                $codigoInternoMl = $this->getCellValue($worksheet, 'AY', $row); // Código interno ML (columna AY)
                 
                 // Inventario interno
                 $stockCortado = (int) $this->getCellValue($worksheet, 'Y', $row); // Cortado
@@ -71,9 +72,14 @@ class ExcelImportService
                     'activo' => true,
                 ];
 
-                // ✨ NUEVO: Solo agregar codigo_interno_ml si no está vacío
+                // ✨ Agregar codigo_interno_ml si no está vacío
                 if (!empty($codigoInternoMl)) {
                     $datosProducto['codigo_interno_ml'] = $codigoInternoMl;
+                }
+
+                // ✨ NUEVO: Agregar plantilla_corte_url si no está vacío
+                if (!empty($plantillaCorteUrl)) {
+                    $datosProducto['plantilla_corte_url'] = $plantillaCorteUrl;
                 }
 
                 if ($producto) {
@@ -84,7 +90,8 @@ class ExcelImportService
                     Log::info("✓ Producto actualizado", [
                         'id' => $producto->id,
                         'modelo' => $modelo,
-                        'codigo_interno_ml' => $codigoInternoMl ?? 'sin código'
+                        'codigo_interno_ml' => $codigoInternoMl ?? 'sin código',
+                        'tiene_plantilla' => !empty($plantillaCorteUrl) ? 'sí' : 'no'
                     ]);
                 } else {
                     // Crear nuevo producto
@@ -94,7 +101,8 @@ class ExcelImportService
                     Log::info("✓ Producto creado", [
                         'id' => $nuevoProducto->id,
                         'modelo' => $modelo,
-                        'codigo_interno_ml' => $codigoInternoMl ?? 'sin código'
+                        'codigo_interno_ml' => $codigoInternoMl ?? 'sin código',
+                        'tiene_plantilla' => !empty($plantillaCorteUrl) ? 'sí' : 'no'
                     ]);
                 }
 
