@@ -8,7 +8,7 @@
     <div class="py-12">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
             
-            {{-- BLOQUE DE CONEXIÓN MERCADO LIBRE (ÚNICA ADICIÓN) --}}
+            {{-- BLOQUE DE CONEXIÓN MERCADO LIBRE --}}
             <div class="bg-white rounded-2xl shadow-lg p-6 flex items-center justify-between">
                 <div class="flex items-center">
                     <div class="p-3 rounded-xl bg-gray-50 mr-4">
@@ -30,7 +30,7 @@
                 @endif
             </div>
 
-            {{-- Tarjetas de métricas ORIGINALES --}}
+            {{-- Tarjetas de métricas --}}
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {{-- Total Productos --}}
                 <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
@@ -93,7 +93,7 @@
                 </div>
             </div>
 
-            {{-- Acciones Rápidas ORIGINAL --}}
+            {{-- Acciones Rápidas --}}
             <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
                 <div class="p-6">
                     <h3 class="text-lg font-semibold text-gray-900 mb-4">Acciones Rápidas</h3>
@@ -105,7 +105,7 @@
                             <span class="ml-4 text-sm font-medium text-gray-900">Nuevo Producto</span>
                         </a>
 
-                        <form action="{{ route('productos.sincronizar-ml-background') }}" method="POST" class="contents">
+                        <form action="{{ route('productos.sync-ml-directo') }}" method="POST" class="contents">
                             @csrf
                             <button type="submit" class="flex items-center p-4 bg-gradient-to-r from-purple-50 to-pink-50 hover:from-purple-100 hover:to-pink-100 rounded-xl transition-all duration-300 group">
                                 <div class="bg-purple-500 rounded-lg p-3 group-hover:scale-110 transition-transform">
@@ -132,7 +132,7 @@
                 </div>
             </div>
 
-            {{-- Gráfica de Stock ORIGINAL --}}
+            {{-- Gráfica de Stock --}}
             <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
                 <div class="p-6">
                     <h3 class="text-lg font-semibold text-gray-900 mb-6">Estado General del Stock</h3>
@@ -156,18 +156,54 @@
                 </div>
             </div>
 
-            {{-- Tabla de Prioritarios ORIGINAL --}}
+            {{-- Tabla de Productos Prioritarios --}}
+            @if($productosPrioritarios->count() > 0)
             <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
                 <div class="p-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Productos Prioritarios</h3>
-                    {{-- [Aqui dejas el codigo de tu tabla de prioritarios exactamente como lo tenias] --}}
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Productos Prioritarios para Fabricar</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock Actual</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fabricar</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridad</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                @foreach($productosPrioritarios as $producto)
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ $producto->sku }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $producto->nombre }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ number_format($producto->stock_total) }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                                            {{ number_format($producto->recomendacion_fabricacion) }}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <div class="flex-1 bg-gray-200 rounded-full h-2 mr-2">
+                                                <div class="bg-red-600 h-2 rounded-full" style="width: {{ min(($producto->recomendacion_fabricacion / ($unidadesAFabricar > 0 ? $unidadesAFabricar : 1)) * 100, 100) }}%"></div>
+                                            </div>
+                                            <span class="text-sm text-gray-500">{{ round(($producto->recomendacion_fabricacion / ($unidadesAFabricar > 0 ? $unidadesAFabricar : 1)) * 100, 1) }}%</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
+            @endif
 
         </div>
     </div>
 
-    {{-- Script Chart.js ORIGINAL --}}
+    {{-- Script Chart.js --}}
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
         const ctx = document.getElementById('stockChart');
@@ -181,7 +217,15 @@
                     borderWidth: 0
                 }]
             },
-            options: { responsive: true, maintainAspectRatio: true }
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
         });
     </script>
 </x-app-layout>
