@@ -125,7 +125,11 @@ class MercadoLibreService
         $token = $this->getToken();
         if (!$token) {
             Log::error('[ML Service] No token available');
-            return ['stock_full' => 0, 'ventas_30_dias' => 0];
+            return [
+                'stock_full' => 0,
+                'ventas_30_dias' => 0,
+                'sincronizado_en' => now()
+            ];
         }
 
         try {
@@ -140,7 +144,11 @@ class MercadoLibreService
                 $itemId = $this->buscarItemPorCodigoInterno($identificador);
                 
                 if (!$itemId) {
-                    return ['stock_full' => 0, 'ventas_30_dias' => 0];
+                    return [
+                        'stock_full' => 0,
+                        'ventas_30_dias' => 0,
+                        'sincronizado_en' => now()
+                    ];
                 }
             }
             // Si no, intentar como código interno de todos modos
@@ -148,7 +156,11 @@ class MercadoLibreService
                 $itemId = $this->buscarItemPorCodigoInterno($identificador);
                 
                 if (!$itemId) {
-                    return ['stock_full' => 0, 'ventas_30_dias' => 0];
+                    return [
+                        'stock_full' => 0,
+                        'ventas_30_dias' => 0,
+                        'sincronizado_en' => now()
+                    ];
                 }
             }
             
@@ -177,6 +189,10 @@ class MercadoLibreService
             Log::error("[ML Service] Exception for {$identificador}: " . $e->getMessage());
         }
 
-        return ['stock_full' => 0, 'ventas_30_dias' => 0];
+        return [
+            'stock_full' => 0,
+            'ventas_30_dias' => 0,
+            'sincronizado_en' => now()
+        ];
     }
 }
