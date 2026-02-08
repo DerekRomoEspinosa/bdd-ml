@@ -28,7 +28,8 @@ class ProductoController extends Controller
             $query->where(function($q) use ($buscar) {
                 $q->where('nombre', 'like', "%{$buscar}%")
                   ->orWhere('modelo', 'like', "%{$buscar}%")
-                  ->orWhere('sku_ml', 'like', "%{$buscar}%");
+                  ->orWhere('sku_ml', 'like', "%{$buscar}%")
+                  ->orWhere('codigo_interno_ml', 'like', "%{$buscar}%");
             });
         }
         
@@ -67,7 +68,7 @@ class ProductoController extends Controller
             }
         }
         
-        // ✨ NUEVO: Ordenar primero los que SÍ tienen codigo_interno_ml
+        // ✨ Ordenar primero los que SÍ tienen codigo_interno_ml
         $productos = $query
             ->orderByRaw('CASE WHEN codigo_interno_ml IS NOT NULL AND codigo_interno_ml != "" THEN 0 ELSE 1 END')
             ->orderBy('nombre')
@@ -172,30 +173,29 @@ class ProductoController extends Controller
 
     /**
      * Sincronizar un producto desde Mercado Libre
-     * ✨ ACTUALIZADO: Prioriza codigo_interno_ml sobre sku_ml
+     * ✨ Usa codigo_interno_ml
      */
     public function sincronizar(Producto $producto)
     {
         try {
-            // ✨ NUEVO: Priorizar codigo_interno_ml
-            $identificador = $producto->codigo_interno_ml ?? $producto->sku_ml;
+            // Usar codigo_interno_ml
+            $identificador = $producto->codigo_interno_ml;
             
             if (!$identificador) {
                 return redirect()
                     ->route('productos.edit', $producto)
-                    ->with('error', '❌ El producto no tiene código interno ni SKU de Mercado Libre.');
+                    ->with('error', '❌ El producto no tiene código interno de Mercado Libre.');
             }
             
-            Log::info("Iniciando sincronización", [
+            Log::info("[Producto Sync] Iniciando", [
                 'producto_id' => $producto->id,
-                'identificador' => $identificador,
-                'tipo' => $producto->codigo_interno_ml ? 'codigo_interno' : 'sku'
+                'codigo_interno_ml' => $identificador
             ]);
             
             // Sincronizar datos
             $datos = $this->mlService->sincronizarProducto($identificador);
             
-            Log::info("Datos obtenidos", ['datos' => $datos]);
+            Log::info("[Producto Sync] Datos obtenidos", $datos);
 
             // Actualizar producto
             $producto->update([
@@ -204,65 +204,52 @@ class ProductoController extends Controller
                 'ml_ultimo_sync' => $datos['sincronizado_en'],
             ]);
 
-            $mensaje = "✅ Datos actualizados desde Mercado Libre";
-            
-            if ($datos['stock_full'] !== null) {
-                $mensaje .= " | Stock Full: {$datos['stock_full']}";
-            }
-            
-            if ($datos['ventas_30_dias'] !== null) {
-                $mensaje .= " | Ventas 30d: {$datos['ventas_30_dias']}";
-            }
+            $mensaje = "✅ Sincronizado | Stock: {$datos['stock_full']} | Ventas 30d: {$datos['ventas_30_dias']}";
 
-            Log::info("Sincronización exitosa", ['mensaje' => $mensaje]);
+            Log::info("[Producto Sync] Exitoso", ['mensaje' => $mensaje]);
 
             return redirect()
                 ->route('productos.edit', $producto)
                 ->with('success', $mensaje);
 
         } catch (\Exception $e) {
-            Log::error("Error completo en sincronización", [
+            Log::error("[Producto Sync] Error", [
                 'producto_id' => $producto->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'error' => $e->getMessage()
             ]);
             
             return redirect()
                 ->route('productos.edit', $producto)
-                ->with('error', '❌ Error al sincronizar: ' . $e->getMessage());
+                ->with('error', '❌ Error: ' . $e->getMessage());
         }
     }
 
     /**
-     * Sincronizar todos los productos activos (optimizado por lotes)
-     * ✨ ACTUALIZADO: Prioriza codigo_interno_ml sobre sku_ml
+     * Sincronizar todos los productos activos
+     * ✨ Usa codigo_interno_ml
      */
     public function sincronizarTodos()
     {
         set_time_limit(300); // 5 minutos
         
         try {
-            $totalProductos = Producto::where('activo', true)->count();
             $sincronizados = 0;
             $errores = 0;
-            $sinIdentificador = 0;
-            $lote = 100; // Procesar 100 productos a la vez
+            $sinCodigo = 0;
+            $lote = 100;
 
             // Procesar en lotes
             Producto::where('activo', true)
-                ->chunk($lote, function($productos) use (&$sincronizados, &$errores, &$sinIdentificador) {
+                ->chunk($lote, function($productos) use (&$sincronizados, &$errores, &$sinCodigo) {
                     foreach ($productos as $producto) {
                         try {
-                            // ✨ NUEVO: Priorizar codigo_interno_ml
-                            $identificador = $producto->codigo_interno_ml ?? $producto->sku_ml;
-                            
-                            if (!$identificador) {
-                                $sinIdentificador++;
-                                Log::warning("Producto sin identificador: {$producto->id}");
+                            if (!$producto->codigo_interno_ml) {
+                                $sinCodigo++;
+                                Log::warning("[Sync Todos] Sin código: {$producto->id}");
                                 continue;
                             }
                             
-                            $datos = $this->mlService->sincronizarProducto($identificador);
+                            $datos = $this->mlService->sincronizarProducto($producto->codigo_interno_ml);
                             
                             $producto->update([
                                 'stock_full' => $datos['stock_full'],
@@ -272,28 +259,32 @@ class ProductoController extends Controller
                             
                             $sincronizados++;
                             
+                            // Pausa de 200ms entre productos
+                            usleep(200000);
+                            
                         } catch (\Exception $e) {
                             $errores++;
-                            Log::error("Error sincronizando producto {$producto->id}: {$e->getMessage()}");
+                            Log::error("[Sync Todos] Error en {$producto->id}: {$e->getMessage()}");
                         }
                     }
                 });
 
-            $mensaje = "🎉 Sincronización completada: {$sincronizados} de {$totalProductos} productos actualizados";
+            $totalProductos = Producto::where('activo', true)->count();
+            $mensaje = "✅ Sincronizados: {$sincronizados}/{$totalProductos}";
             
             if ($errores > 0) {
-                $mensaje .= " | ⚠️ {$errores} errores";
+                $mensaje .= " | ⚠️ Errores: {$errores}";
             }
             
-            if ($sinIdentificador > 0) {
-                $mensaje .= " | ℹ️ {$sinIdentificador} sin código ML";
+            if ($sinCodigo > 0) {
+                $mensaje .= " | ℹ️ Sin código: {$sinCodigo}";
             }
 
-            Log::info("Sincronización masiva completada", [
+            Log::info("[Sync Todos] Completado", [
                 'total' => $totalProductos,
                 'sincronizados' => $sincronizados,
                 'errores' => $errores,
-                'sin_identificador' => $sinIdentificador
+                'sin_codigo' => $sinCodigo
             ]);
 
             return redirect()
@@ -301,11 +292,11 @@ class ProductoController extends Controller
                 ->with('success', $mensaje);
 
         } catch (\Exception $e) {
-            Log::error("Error en sincronización masiva: {$e->getMessage()}");
+            Log::error("[Sync Todos] Error general: {$e->getMessage()}");
             
             return redirect()
                 ->route('productos.index')
-                ->with('error', '❌ Error en sincronización masiva: ' . $e->getMessage());
+                ->with('error', '❌ Error: ' . $e->getMessage());
         }
     }
 }
