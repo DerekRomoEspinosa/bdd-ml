@@ -13,15 +13,10 @@ class MercadoLibreService
     private function getToken()
     {
         $tokenData = DB::table('mercadolibre_tokens')->find(1);
-        
-        if (!$tokenData) {
-            Log::warning('[ML Service] No hay token guardado');
-            return null;
-        }
+        if (!$tokenData) return null;
 
-        // Si el token está por vencer (menos de 1 hora restante), refrescarlo
-        if ($tokenData->expires_at && now()->diffInMinutes($tokenData->expires_at) < 60) {
-            Log::info('[ML Service] Token por vencer, refrescando...');
+        // Si el token tiene más de 5 horas, lo refrescamos (duran 6)
+        if (now()->diffInHours($tokenData->updated_at) >= 5) {
             return $this->refreshToken($tokenData->refresh_token);
         }
 
@@ -30,85 +25,94 @@ class MercadoLibreService
 
     private function refreshToken($refreshToken)
     {
-        try {
-            Log::info('[ML Service] Refrescando token...');
-            
-            $response = Http::timeout(30)
-                ->asForm()
-                ->post("{$this->baseUrl}/oauth/token", [
-                    'grant_type' => 'refresh_token',
-                    'client_id' => config('services.mercadolibre.app_id'),
-                    'client_secret' => config('services.mercadolibre.secret_key'),
-                    'refresh_token' => $refreshToken,
-                ]);
+        $response = Http::asForm()->post("{$this->baseUrl}/oauth/token", [
+            'grant_type' => 'refresh_token',
+            'client_id' => env('ML_CLIENT_ID'),
+            'client_secret' => env('ML_CLIENT_SECRET'),
+            'refresh_token' => $refreshToken,
+        ]);
 
-            if ($response->successful()) {
-                $data = $response->json();
-                
-                $expiresAt = now()->addSeconds($data['expires_in'] ?? 21600);
-                
-                DB::table('mercadolibre_tokens')->where('id', 1)->update([
-                    'access_token' => $data['access_token'],
-                    'refresh_token' => $data['refresh_token'] ?? $refreshToken,
-                    'expires_in' => $data['expires_in'] ?? 21600,
-                    'expires_at' => $expiresAt,
-                    'updated_at' => now(),
-                ]);
-                
-                Log::info('[ML Service] Token refrescado exitosamente');
-                
-                return $data['access_token'];
-            }
-            
-            Log::error('[ML Service] Error al refrescar token', [
-                'status' => $response->status(),
-                'body' => $response->body()
+        if ($response->successful()) {
+            $data = $response->json();
+            DB::table('mercadolibre_tokens')->where('id', 1)->update([
+                'access_token' => $data['access_token'],
+                'refresh_token' => $data['refresh_token'],
+                'updated_at' => now(),
             ]);
-            
-        } catch (\Exception $e) {
-            Log::error('[ML Service] Excepción al refrescar token: ' . $e->getMessage());
+            return $data['access_token'];
         }
-        
         return null;
     }
 
-    public function sincronizarProducto(string $itemId): array
+    /**
+     * Sincronizar producto buscando por SKU
+     */
+    public function sincronizarProductoPorSKU(string $sku): array
     {
         $token = $this->getToken();
-        
         if (!$token) {
-            Log::error('[ML Service] No hay token disponible para sincronizar');
-            return ['stock_full' => 0, 'ventas_30_dias' => 0, 'sincronizado_en' => now()];
+            Log::error('[ML Service] No token available');
+            return ['stock_full' => 0, 'ventas_30_dias' => 0];
         }
 
         try {
-            Log::info("[ML Service] Consultando item: {$itemId}");
+            // Obtener el seller_id (tu user ID de ML)
+            $meResponse = Http::withToken($token)->get("{$this->baseUrl}/users/me");
             
-            $response = Http::timeout(30)
-                ->withToken($token)
-                ->get("{$this->baseUrl}/items/{$itemId}");
+            if (!$meResponse->successful()) {
+                Log::error('[ML Service] Cannot get user info');
+                return ['stock_full' => 0, 'ventas_30_dias' => 0];
+            }
+            
+            $sellerId = $meResponse->json()['id'];
+            
+            // Buscar items por SKU
+            $searchUrl = "{$this->baseUrl}/users/{$sellerId}/items/search";
+            $searchResponse = Http::withToken($token)->get($searchUrl, [
+                'seller_custom_field' => $sku, // Buscar por SKU
+                'limit' => 1
+            ]);
+            
+            if (!$searchResponse->successful() || empty($searchResponse->json()['results'])) {
+                Log::warning("[ML Service] No item found for SKU: {$sku}");
+                return ['stock_full' => 0, 'ventas_30_dias' => 0];
+            }
+            
+            $itemId = $searchResponse->json()['results'][0];
+            
+            // Obtener detalles del item
+            return $this->sincronizarProducto($itemId);
+            
+        } catch (\Exception $e) {
+            Log::error("[ML Service] Error sync by SKU {$sku}: " . $e->getMessage());
+        }
 
+        return ['stock_full' => 0, 'ventas_30_dias' => 0];
+    }
+
+    /**
+     * Sincronizar producto por ID directo de ML
+     */
+    public function sincronizarProducto(string $itemId): array
+    {
+        $token = $this->getToken();
+        if (!$token) return ['stock_full' => 0, 'ventas_30_dias' => 0];
+
+        try {
+            $response = Http::withToken($token)->get("{$this->baseUrl}/items/{$itemId}");
+            
             if ($response->successful()) {
                 $data = $response->json();
-                
-                Log::info("[ML Service] Item {$itemId} - Stock: {$data['available_quantity']}, Ventas: {$data['sold_quantity']}");
-                
                 return [
                     'stock_full' => $data['available_quantity'] ?? 0,
                     'ventas_30_dias' => $data['sold_quantity'] ?? 0,
                     'sincronizado_en' => now(),
                 ];
             }
-            
-            Log::error("[ML Service] Error al consultar item {$itemId}", [
-                'status' => $response->status(),
-                'body' => $response->body()
-            ]);
-            
         } catch (\Exception $e) {
-            Log::error("[ML Service] Excepción al sincronizar {$itemId}: " . $e->getMessage());
+            Log::error("Error Sync ML: " . $e->getMessage());
         }
 
-        return ['stock_full' => 0, 'ventas_30_dias' => 0, 'sincronizado_en' => now()];
+        return ['stock_full' => 0, 'ventas_30_dias' => 0];
     }
 }
