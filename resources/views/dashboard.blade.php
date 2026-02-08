@@ -97,7 +97,8 @@
             <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
                 <div class="p-6">
                     <h3 class="text-lg font-semibold text-gray-900 mb-4">Acciones Rápidas</h3>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        
                         <a href="{{ route('productos.create') }}" class="flex items-center p-4 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 rounded-xl transition-all duration-300 group">
                             <div class="bg-blue-500 rounded-lg p-3 group-hover:scale-110 transition-transform">
                                 <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
@@ -128,6 +129,14 @@
                             </div>
                             <span class="ml-4 text-sm font-medium text-gray-900">Exportar Excel</span>
                         </a>
+
+                        <a href="{{ route('admin.mapear-ml') }}" class="flex items-center p-4 bg-gradient-to-r from-yellow-50 to-amber-50 hover:from-yellow-100 hover:to-amber-100 rounded-xl transition-all duration-300 group">
+                            <div class="bg-yellow-500 rounded-lg p-3 group-hover:scale-110 transition-transform">
+                                <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path></svg>
+                            </div>
+                            <span class="ml-4 text-sm font-medium text-gray-900">Mapear Códigos ML</span>
+                        </a>
+
                     </div>
                 </div>
             </div>
@@ -187,7 +196,7 @@
                                         <div class="flex items-center">
                                             <div class="flex-1 bg-gray-200 rounded-full h-2 mr-2">
                                                 <div class="bg-red-600 h-2 rounded-full" style="width: {{ min(($producto->recomendacion_fabricacion / ($unidadesAFabricar > 0 ? $unidadesAFabricar : 1)) * 100, 100) }}%"></div>
-                                            </div>
+                            </div>
                                             <span class="text-sm text-gray-500">{{ round(($producto->recomendacion_fabricacion / ($unidadesAFabricar > 0 ? $unidadesAFabricar : 1)) * 100, 1) }}%</span>
                                         </div>
                                     </td>

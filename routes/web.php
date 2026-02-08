@@ -7,6 +7,7 @@ use App\Http\Controllers\MLAuthController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Artisan;
 
 // Página de inicio
 Route::get('/', function () {
@@ -122,7 +123,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
             // Construir query dinámicamente según las columnas disponibles
             $productos = \App\Models\Producto::where('activo', true);
             
-            if (in_array('ml_item_id', $nombresColumnas)) {
+            // Priorizar codigo_interno_ml > ml_item_id > sku_ml
+            if (in_array('codigo_interno_ml', $nombresColumnas)) {
+                $productos->where(function($query) {
+                    $query->whereNotNull('codigo_interno_ml')
+                          ->where('codigo_interno_ml', '!=', '');
+                });
+            } elseif (in_array('ml_item_id', $nombresColumnas)) {
                 $productos->where(function($query) {
                     $query->whereNotNull('ml_item_id')
                           ->where('ml_item_id', '!=', '');
@@ -133,7 +140,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
                           ->where('sku_ml', '!=', '');
                 });
             } else {
-                Log::error("[Sync Directo] No hay columna ml_item_id ni sku_ml");
+                Log::error("[Sync Directo] No hay columna para IDs de ML");
                 return redirect()->route('dashboard')
                     ->with('error', '❌ La tabla productos no tiene columna para IDs de Mercado Libre.');
             }
@@ -143,7 +150,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             if ($productos->isEmpty()) {
                 Log::warning("[Sync Directo] No hay productos con ML ID");
                 return redirect()->route('dashboard')
-                    ->with('warning', '⚠️ No hay productos con ID de Mercado Libre. Debes agregar los IDs primero.');
+                    ->with('warning', '⚠️ No hay productos con ID/código de Mercado Libre.');
             }
             
             Log::info("[Sync Directo] Productos encontrados: " . $productos->count());
@@ -153,9 +160,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             $sinId = 0;
             
             foreach ($productos as $producto) {
-                // Determinar qué ID usar
+                // Determinar qué ID usar (prioridad: codigo_interno_ml > ml_item_id > sku_ml)
                 $mlId = null;
-                if (in_array('ml_item_id', $nombresColumnas) && !empty($producto->ml_item_id)) {
+                if (in_array('codigo_interno_ml', $nombresColumnas) && !empty($producto->codigo_interno_ml)) {
+                    $mlId = $producto->codigo_interno_ml;
+                } elseif (in_array('ml_item_id', $nombresColumnas) && !empty($producto->ml_item_id)) {
                     $mlId = $producto->ml_item_id;
                 } elseif (in_array('sku_ml', $nombresColumnas) && !empty($producto->sku_ml)) {
                     $mlId = $producto->sku_ml;
@@ -232,6 +241,43 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('productos.sync-ml-directo');
 
     // ============================================
+    // MAPEO AUTOMÁTICO DE CÓDIGOS ML
+    // ============================================
+    
+    // Ver página de mapeo
+    Route::get('/admin/mapear-ml', function () {
+        $tokenData = DB::table('mercadolibre_tokens')->find(1);
+        $totalProductos = \App\Models\Producto::where('activo', true)->count();
+        $conCodigo = \App\Models\Producto::where('activo', true)
+            ->whereNotNull('codigo_interno_ml')
+            ->where('codigo_interno_ml', '!=', '')
+            ->count();
+        $sinCodigo = $totalProductos - $conCodigo;
+        
+        return view('admin.mapear-ml', compact('tokenData', 'totalProductos', 'conCodigo', 'sinCodigo'));
+    })->name('admin.mapear-ml');
+    
+    // Ejecutar mapeo
+    Route::post('/admin/mapear-ml/ejecutar', function (Illuminate\Http\Request $request) {
+        set_time_limit(600); // 10 minutos
+        
+        $limit = $request->input('limit', 50);
+        
+        try {
+            Artisan::call('ml:mapear-codigos', ['--limit' => $limit]);
+            $output = Artisan::output();
+            
+            return redirect()->route('admin.mapear-ml')
+                ->with('success', '✅ Mapeo ejecutado correctamente')
+                ->with('output', $output);
+                
+        } catch (\Exception $e) {
+            return redirect()->route('admin.mapear-ml')
+                ->with('error', '❌ Error: ' . $e->getMessage());
+        }
+    })->name('admin.mapear-ml.ejecutar');
+
+    // ============================================
     // IMPORTACIÓN Y EXPORTACIÓN EXCEL
     // ============================================
     Route::get('productos-import', [ExcelController::class, 'showImportForm'])
@@ -263,7 +309,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 'access_token_prefix' => substr($token->access_token, 0, 30) . '...',
                 'has_refresh_token' => !empty($token->refresh_token) ? 'SÍ' : 'NO',
                 'expires_in' => $token->expires_in,
-                'expires_at' => $token->expires_at,
                 'created_at' => $token->created_at,
                 'updated_at' => $token->updated_at,
             ];
@@ -272,33 +317,33 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return response()->json($data, 200, [], JSON_PRETTY_PRINT);
     })->name('test.ml');
     
-    // Ver productos con ML ID - CORREGIDO
+    // Ver productos con ML ID
     Route::get('/debug-ml-products', function () {
-        // Primero, ver qué columnas tiene la tabla
         $columnas = DB::select("SHOW COLUMNS FROM productos");
         $nombresColumnas = array_map(fn($col) => $col->Field, $columnas);
         
-        // Seleccionar solo las columnas que existen
         $selectFields = ['id', 'nombre'];
         
-        // Agregar columnas opcionales si existen
         if (in_array('sku', $nombresColumnas)) $selectFields[] = 'sku';
         if (in_array('sku_ml', $nombresColumnas)) $selectFields[] = 'sku_ml';
+        if (in_array('codigo_interno_ml', $nombresColumnas)) $selectFields[] = 'codigo_interno_ml';
         if (in_array('ml_item_id', $nombresColumnas)) $selectFields[] = 'ml_item_id';
         if (in_array('stock_full', $nombresColumnas)) $selectFields[] = 'stock_full';
         if (in_array('ventas_30_dias', $nombresColumnas)) $selectFields[] = 'ventas_30_dias';
         if (in_array('sincronizado_en', $nombresColumnas)) $selectFields[] = 'sincronizado_en';
         if (in_array('activo', $nombresColumnas)) $selectFields[] = 'activo';
         
-        // Construir query dinámicamente
         $query = \App\Models\Producto::select($selectFields);
         
         if (in_array('activo', $nombresColumnas)) {
             $query->where('activo', true);
         }
         
-        // Filtrar por ml_item_id o sku_ml
-        if (in_array('ml_item_id', $nombresColumnas)) {
+        if (in_array('codigo_interno_ml', $nombresColumnas)) {
+            $query->where(function($q) {
+                $q->whereNotNull('codigo_interno_ml')->where('codigo_interno_ml', '!=', '');
+            });
+        } elseif (in_array('ml_item_id', $nombresColumnas)) {
             $query->where(function($q) {
                 $q->whereNotNull('ml_item_id')->where('ml_item_id', '!=', '');
             });
