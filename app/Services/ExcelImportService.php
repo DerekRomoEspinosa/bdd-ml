@@ -30,12 +30,13 @@ class ExcelImportService
                 // Leer datos de las columnas importantes (Estructura de Carlos)
                 $modelo = $this->getCellValue($worksheet, 'A', $row); // Modelo
                 $nombre = $this->getCellValue($worksheet, 'C', $row); // Nombre Genérico
-                $skuMl = $this->getCellValue($worksheet, 'AS', $row); // Código interno ML (columna 45)
+                $skuMl = $this->getCellValue($worksheet, 'AS', $row); // SKU ML (columna AS)
+                $codigoInternoMl = $this->getCellValue($worksheet, 'AY', $row); // ✨ NUEVO: Código interno ML (columna AY)
                 
                 // Inventario interno
                 $stockCortado = (int) $this->getCellValue($worksheet, 'Y', $row); // Cortado
-                $stockBodega = (int) $this->getCellValue($worksheet, 'AB', $row); // Stock almacén (columna 28)
-                $stockEnviadoFull = (int) $this->getCellValue($worksheet, 'AD', $row); // Proceso envío Full (columna 30)
+                $stockBodega = (int) $this->getCellValue($worksheet, 'AB', $row); // Stock almacén
+                $stockEnviadoFull = (int) $this->getCellValue($worksheet, 'AD', $row); // Proceso envío Full
                 
                 // Validar datos mínimos
                 if (empty($modelo) && empty($nombre)) {
@@ -51,41 +52,56 @@ class ExcelImportService
                     $nombre = $modelo ?: 'Producto sin nombre';
                 }
 
-                // Buscar si el producto ya existe (por SKU o por modelo)
+                // Buscar si el producto ya existe (por SKU o por modelo o por código interno ML)
                 $producto = Producto::where('sku_ml', $skuMl)
                     ->orWhere('modelo', $modelo)
+                    ->when($codigoInternoMl, function($query) use ($codigoInternoMl) {
+                        return $query->orWhere('codigo_interno_ml', $codigoInternoMl);
+                    })
                     ->first();
+
+                // Preparar datos para insertar/actualizar
+                $datosProducto = [
+                    'modelo' => $modelo,
+                    'nombre' => $nombre,
+                    'sku_ml' => $skuMl,
+                    'stock_bodega' => $stockBodega,
+                    'stock_cortado' => $stockCortado,
+                    'stock_enviado_full' => $stockEnviadoFull,
+                    'activo' => true,
+                ];
+
+                // ✨ NUEVO: Solo agregar codigo_interno_ml si no está vacío
+                if (!empty($codigoInternoMl)) {
+                    $datosProducto['codigo_interno_ml'] = $codigoInternoMl;
+                }
 
                 if ($producto) {
                     // Actualizar producto existente
-                    $producto->update([
-                        'modelo' => $modelo,
-                        'nombre' => $nombre,
-                        'sku_ml' => $skuMl,
-                        'stock_bodega' => $stockBodega,
-                        'stock_cortado' => $stockCortado,
-                        'stock_enviado_full' => $stockEnviadoFull,
-                        'activo' => true,
-                    ]);
+                    $producto->update($datosProducto);
                     $actualizados++;
+                    
+                    Log::info("✓ Producto actualizado", [
+                        'id' => $producto->id,
+                        'modelo' => $modelo,
+                        'codigo_interno_ml' => $codigoInternoMl ?? 'sin código'
+                    ]);
                 } else {
                     // Crear nuevo producto
-                    Producto::create([
-                        'modelo' => $modelo,
-                        'nombre' => $nombre,
-                        'sku_ml' => $skuMl,
-                        'stock_bodega' => $stockBodega,
-                        'stock_cortado' => $stockCortado,
-                        'stock_enviado_full' => $stockEnviadoFull,
-                        'activo' => true,
-                    ]);
+                    $nuevoProducto = Producto::create($datosProducto);
                     $importados++;
+                    
+                    Log::info("✓ Producto creado", [
+                        'id' => $nuevoProducto->id,
+                        'modelo' => $modelo,
+                        'codigo_interno_ml' => $codigoInternoMl ?? 'sin código'
+                    ]);
                 }
 
             } catch (\Exception $e) {
                 $errores++;
                 $erroresDetalle[] = "Fila {$row}: " . $e->getMessage();
-                Log::error("Error importando fila {$row}", [
+                Log::error("✗ Error importando fila {$row}", [
                     'error' => $e->getMessage(),
                     'trace' => $e->getTraceAsString()
                 ]);
