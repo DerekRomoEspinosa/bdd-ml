@@ -40,51 +40,51 @@
             @endif
             
             {{-- BLOQUE DE CONEXIÓN MERCADO LIBRE --}}
-            <div class="bg-white rounded-2xl shadow-lg p-6">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center">
-                        <div class="p-3 rounded-xl bg-gray-50 mr-4">
-                            <svg class="h-6 w-6 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                            </svg>
-                        </div>
-                        <div>
-                            <h3 class="text-lg font-bold text-gray-900">Mercado Libre API</h3>
-                            @php
-                                $token = DB::table('mercadolibre_tokens')->find(1);
-                                $tokenExpired = $token && now()->greaterThan($token->expires_at);
-                            @endphp
-                            
-                            @if(!$token)
-                                <p class="text-sm text-red-500">No vinculado. Los datos de ML no se actualizarán.</p>
-                            @elseif($tokenExpired)
-                                <p class="text-sm text-yellow-600">⚠️ Token expirado. Refresca para continuar sincronizando.</p>
-                            @else
-                                <p class="text-sm text-green-600">✅ Conectado. Expira: {{ $token->expires_at->diffForHumans() }}</p>
-                            @endif
-                        </div>
-                    </div>
-                    <div class="flex gap-2">
-                        @if(!$token)
-                            <a href="{{ route('ml.login') }}" 
-                               class="inline-flex items-center px-4 py-2 bg-white border border-gray-200 shadow-sm rounded-xl text-sm font-bold text-gray-900 hover:bg-gray-50">
-                                <span class="mr-2">🟡</span> Vincular Cuenta
-                            </a>
-                        @else
-                            <form action="{{ route('ml.refresh-token') }}" method="POST" class="inline">
-                                @csrf
-                                <button type="submit" 
-                                        class="inline-flex items-center px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white shadow-sm rounded-xl text-sm font-bold transition">
-                                    <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                                    </svg>
-                                    Refrescar Token
-                                </button>
-                            </form>
-                        @endif
-                    </div>
-                </div>
+<div class="bg-white rounded-2xl shadow-lg p-6">
+    <div class="flex items-center justify-between">
+        <div class="flex items-center">
+            <div class="p-3 rounded-xl bg-gray-50 mr-4">
+                <svg class="h-6 w-6 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                </svg>
             </div>
+            <div>
+                <h3 class="text-lg font-bold text-gray-900">Mercado Libre API</h3>
+                @php
+                    $token = DB::table('mercadolibre_tokens')->find(1);
+                    $tokenExpired = $token && now()->greaterThan(\Carbon\Carbon::parse($token->expires_at));
+                @endphp
+                
+                @if(!$token)
+                    <p class="text-sm text-red-500">No vinculado. Los datos de ML no se actualizarán.</p>
+                @elseif($tokenExpired)
+                    <p class="text-sm text-yellow-600">⚠️ Token expirado. Refresca para continuar sincronizando.</p>
+                @else
+                    <p class="text-sm text-green-600">✅ Conectado. Expira: {{ \Carbon\Carbon::parse($token->expires_at)->diffForHumans() }}</p>
+                @endif
+            </div>
+        </div>
+        <div class="flex gap-2">
+            @if(!$token)
+                <a href="{{ route('ml.login') }}" 
+                   class="inline-flex items-center px-4 py-2 bg-white border border-gray-200 shadow-sm rounded-xl text-sm font-bold text-gray-900 hover:bg-gray-50">
+                    <span class="mr-2">🟡</span> Vincular Cuenta
+                </a>
+            @else
+                <form action="{{ route('ml.refresh-token') }}" method="POST" class="inline">
+                    @csrf
+                    <button type="submit" 
+                            class="inline-flex items-center px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white shadow-sm rounded-xl text-sm font-bold transition">
+                        <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        Refrescar Token
+                    </button>
+                </form>
+            @endif
+        </div>
+    </div>
+</div>
 
             {{-- Tarjetas de métricas --}}
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
