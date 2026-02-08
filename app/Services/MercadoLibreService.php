@@ -76,7 +76,7 @@ class MercadoLibreService
     }
 
     /**
-     * Buscar item ID por código interno ML
+     * 🔥 NUEVA ESTRATEGIA: Buscar item ID usando múltiples métodos
      */
     private function buscarItemPorCodigoInterno(string $codigoInterno): ?string
     {
@@ -84,32 +84,69 @@ class MercadoLibreService
         $sellerId = $this->getSellerId();
         
         if (!$token || !$sellerId) {
+            Log::error('[ML Service] No token or seller ID available');
             return null;
         }
 
         try {
-            // Buscar en los items del seller por seller_custom_field
-            $searchUrl = "{$this->baseUrl}/users/{$sellerId}/items/search";
+            // 🎯 ESTRATEGIA 1: Buscar en todos los items del seller y filtrar localmente
+            Log::info("[ML Service] Buscando item con código interno: {$codigoInterno}");
             
-            $response = Http::withToken($token)->get($searchUrl, [
-                'seller_custom_field' => $codigoInterno,
-                'limit' => 1
-            ]);
+            $offset = 0;
+            $limit = 50; // ML permite hasta 50 por request
+            $maxPages = 20; // Buscar hasta 1000 items (50 * 20)
             
-            if ($response->successful()) {
-                $results = $response->json()['results'] ?? [];
+            for ($page = 0; $page < $maxPages; $page++) {
+                $response = Http::withToken($token)->get("{$this->baseUrl}/users/{$sellerId}/items/search", [
+                    'offset' => $offset,
+                    'limit' => $limit,
+                    'status' => 'active', // Solo items activos
+                ]);
                 
-                if (!empty($results)) {
-                    $itemId = $results[0];
-                    Log::info("[ML Service] ✓ Found item {$itemId} for code {$codigoInterno}");
-                    return $itemId;
+                if (!$response->successful()) {
+                    Log::error("[ML Service] Error fetching items page {$page}: " . $response->status());
+                    break;
+                }
+                
+                $data = $response->json();
+                $itemIds = $data['results'] ?? [];
+                
+                if (empty($itemIds)) {
+                    Log::info("[ML Service] No more items found at page {$page}");
+                    break;
+                }
+                
+                // Obtener detalles de cada item en este lote
+                foreach ($itemIds as $itemId) {
+                    $itemResponse = Http::withToken($token)->get("{$this->baseUrl}/items/{$itemId}");
+                    
+                    if ($itemResponse->successful()) {
+                        $itemData = $itemResponse->json();
+                        $sellerCustomField = $itemData['seller_custom_field'] ?? null;
+                        
+                        // ✅ Comparar código interno
+                        if ($sellerCustomField == $codigoInterno) {
+                            Log::info("[ML Service] ✓ ENCONTRADO! Item {$itemId} = código {$codigoInterno}");
+                            return $itemId;
+                        }
+                    }
+                    
+                    // Pausa para no saturar la API
+                    usleep(100000); // 100ms entre items
+                }
+                
+                $offset += $limit;
+                
+                // Si no hay más páginas
+                if (count($itemIds) < $limit) {
+                    break;
                 }
             }
             
-            Log::warning("[ML Service] No item found for code: {$codigoInterno}");
+            Log::warning("[ML Service] ❌ No se encontró item con código interno: {$codigoInterno}");
             
         } catch (\Exception $e) {
-            Log::error("[ML Service] Error searching by code {$codigoInterno}: " . $e->getMessage());
+            Log::error("[ML Service] Exception buscando código {$codigoInterno}: " . $e->getMessage());
         }
 
         return null;
@@ -136,26 +173,17 @@ class MercadoLibreService
             $itemId = null;
             
             // Si empieza con "MLM" es un ID directo
-            if (str_starts_with($identificador, 'MLM')) {
+            if (str_starts_with(strtoupper($identificador), 'MLM')) {
                 $itemId = $identificador;
+                Log::info("[ML Service] Usando ML ID directo: {$itemId}");
             } 
-            // Si es numérico de ~10 dígitos, es código interno
-            elseif (is_numeric($identificador) && strlen($identificador) >= 8) {
-                $itemId = $this->buscarItemPorCodigoInterno($identificador);
-                
-                if (!$itemId) {
-                    return [
-                        'stock_full' => 0,
-                        'ventas_30_dias' => 0,
-                        'sincronizado_en' => now()
-                    ];
-                }
-            }
-            // Si no, intentar como código interno de todos modos
+            // Si no, buscar por código interno
             else {
+                Log::info("[ML Service] Buscando por código interno: {$identificador}");
                 $itemId = $this->buscarItemPorCodigoInterno($identificador);
                 
                 if (!$itemId) {
+                    Log::warning("[ML Service] No se pudo encontrar item con código: {$identificador}");
                     return [
                         'stock_full' => 0,
                         'ventas_30_dias' => 0,
@@ -165,7 +193,7 @@ class MercadoLibreService
             }
             
             // Obtener datos del item
-            Log::info("[ML Service] Fetching data for item: {$itemId}");
+            Log::info("[ML Service] Obteniendo datos del item: {$itemId}");
             
             $response = Http::withToken($token)->get("{$this->baseUrl}/items/{$itemId}");
             
@@ -182,11 +210,12 @@ class MercadoLibreService
                 
                 return $result;
             } else {
-                Log::error("[ML Service] API error for {$itemId}: " . $response->status());
+                Log::error("[ML Service] API error para {$itemId}: " . $response->status() . " - " . $response->body());
             }
             
         } catch (\Exception $e) {
-            Log::error("[ML Service] Exception for {$identificador}: " . $e->getMessage());
+            Log::error("[ML Service] Exception para {$identificador}: " . $e->getMessage());
+            Log::error("[ML Service] Trace: " . $e->getTraceAsString());
         }
 
         return [
