@@ -62,6 +62,42 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('mercadolibre/auth', [MLAuthController::class, 'redirectToML'])
         ->name('ml.login');
     
+    // Refrescar token de ML manualmente
+    Route::post('/ml/refresh-token', function () {
+        try {
+            $tokenData = DB::table('mercadolibre_tokens')->find(1);
+            
+            if (!$tokenData) {
+                return redirect()->back()->with('error', '❌ No hay token para refrescar');
+            }
+            
+            $response = Http::asForm()->post('https://api.mercadolibre.com/oauth/token', [
+                'grant_type' => 'refresh_token',
+                'client_id' => env('ML_CLIENT_ID'),
+                'client_secret' => env('ML_CLIENT_SECRET'),
+                'refresh_token' => $tokenData->refresh_token,
+            ]);
+            
+            if (!$response->successful()) {
+                return redirect()->back()->with('error', '❌ Error refrescando token: ' . $response->body());
+            }
+            
+            $data = $response->json();
+            
+            DB::table('mercadolibre_tokens')->where('id', 1)->update([
+                'access_token' => $data['access_token'],
+                'refresh_token' => $data['refresh_token'] ?? $tokenData->refresh_token,
+                'updated_at' => now(),
+                'expires_at' => now()->addHours(6),
+            ]);
+            
+            return redirect()->back()->with('success', '✅ Token refrescado correctamente');
+            
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', '❌ Error: ' . $e->getMessage());
+        }
+    })->name('ml.refresh-token');
+    
     // Sincronización individual
     Route::post('productos/{producto}/sincronizar', [ProductoController::class, 'sincronizar'])
         ->name('productos.sincronizar');
@@ -303,7 +339,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         }
     })->name('test.sync.simple');
     
-    // 🆕 Ver datos RAW de un item específico en ML
+    // Ver datos RAW de un item específico en ML
     Route::get('/debug-ml-item/{itemId}', function ($itemId) {
         try {
             $token = DB::table('mercadolibre_tokens')->find(1);
@@ -346,7 +382,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         }
     })->name('debug.ml.item');
     
-    // 🆕 Ver TODOS los items del seller
+    // Ver TODOS los items del seller
     Route::get('/debug-ml-all-items', function () {
         try {
             $token = DB::table('mercadolibre_tokens')->find(1);

@@ -8,26 +8,82 @@
     <div class="py-12">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
             
-            {{-- BLOQUE DE CONEXIÓN MERCADO LIBRE --}}
-            <div class="bg-white rounded-2xl shadow-lg p-6 flex items-center justify-between">
-                <div class="flex items-center">
-                    <div class="p-3 rounded-xl bg-gray-50 mr-4">
-                        <svg class="h-6 w-6 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                        </svg>
-                    </div>
-                    <div>
-                        <h3 class="text-lg font-bold text-gray-900">Mercado Libre API</h3>
-                        <p class="text-sm text-gray-500">
-                            {{ DB::table('mercadolibre_tokens')->find(1) ? 'Conectado.' : 'No vinculado. Los datos de ML no se actualizarán.' }}
-                        </p>
+            {{-- Mensajes de sesión --}}
+            @if(session('success'))
+                <div class="bg-green-50 border-l-4 border-green-400 p-4 rounded-r-lg">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm text-green-700">{{ session('success') }}</p>
+                        </div>
                     </div>
                 </div>
-                @if(!DB::table('mercadolibre_tokens')->find(1))
-                    <a href="{{ route('ml.login') }}" class="inline-flex items-center px-4 py-2 bg-white border border-gray-200 shadow-sm rounded-xl text-sm font-bold text-gray-900">
-                        <span class="mr-2">🟡</span> Vincular Cuenta
-                    </a>
-                @endif
+            @endif
+
+            @if(session('error'))
+                <div class="bg-red-50 border-l-4 border-red-400 p-4 rounded-r-lg">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm text-red-700">{{ session('error') }}</p>
+                        </div>
+                    </div>
+                </div>
+            @endif
+            
+            {{-- BLOQUE DE CONEXIÓN MERCADO LIBRE --}}
+            <div class="bg-white rounded-2xl shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <div class="p-3 rounded-xl bg-gray-50 mr-4">
+                            <svg class="h-6 w-6 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-gray-900">Mercado Libre API</h3>
+                            @php
+                                $token = DB::table('mercadolibre_tokens')->find(1);
+                                $tokenExpired = $token && now()->greaterThan($token->expires_at);
+                            @endphp
+                            
+                            @if(!$token)
+                                <p class="text-sm text-red-500">No vinculado. Los datos de ML no se actualizarán.</p>
+                            @elseif($tokenExpired)
+                                <p class="text-sm text-yellow-600">⚠️ Token expirado. Refresca para continuar sincronizando.</p>
+                            @else
+                                <p class="text-sm text-green-600">✅ Conectado. Expira: {{ $token->expires_at->diffForHumans() }}</p>
+                            @endif
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        @if(!$token)
+                            <a href="{{ route('ml.login') }}" 
+                               class="inline-flex items-center px-4 py-2 bg-white border border-gray-200 shadow-sm rounded-xl text-sm font-bold text-gray-900 hover:bg-gray-50">
+                                <span class="mr-2">🟡</span> Vincular Cuenta
+                            </a>
+                        @else
+                            <form action="{{ route('ml.refresh-token') }}" method="POST" class="inline">
+                                @csrf
+                                <button type="submit" 
+                                        class="inline-flex items-center px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white shadow-sm rounded-xl text-sm font-bold transition">
+                                    <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                    </svg>
+                                    Refrescar Token
+                                </button>
+                            </form>
+                        @endif
+                    </div>
+                </div>
             </div>
 
             {{-- Tarjetas de métricas --}}
@@ -184,7 +240,7 @@
                             <tbody class="bg-white divide-y divide-gray-200">
                                 @foreach($productosPrioritarios as $producto)
                                 <tr class="hover:bg-gray-50">
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ $producto->sku }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ $producto->sku_ml }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $producto->nombre }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ number_format($producto->stock_total) }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap">
@@ -196,7 +252,7 @@
                                         <div class="flex items-center">
                                             <div class="flex-1 bg-gray-200 rounded-full h-2 mr-2">
                                                 <div class="bg-red-600 h-2 rounded-full" style="width: {{ min(($producto->recomendacion_fabricacion / ($unidadesAFabricar > 0 ? $unidadesAFabricar : 1)) * 100, 100) }}%"></div>
-                            </div>
+                                            </div>
                                             <span class="text-sm text-gray-500">{{ round(($producto->recomendacion_fabricacion / ($unidadesAFabricar > 0 ? $unidadesAFabricar : 1)) * 100, 1) }}%</span>
                                         </div>
                                     </td>
