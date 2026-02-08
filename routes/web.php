@@ -293,7 +293,52 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ], 200, [], JSON_PRETTY_PRINT);
     })->name('debug.ml.products');
     
-    // Test de sincronización
+    // 🆕 Probar con un producto específico por ID de BD
+    Route::get('/test-sync-producto/{id}', function ($id) {
+        try {
+            $producto = \App\Models\Producto::findOrFail($id);
+            
+            if (!$producto->codigo_interno_ml) {
+                return response()->json(['error' => 'Este producto no tiene código interno ML'], 404);
+            }
+            
+            $token = DB::table('mercadolibre_tokens')->find(1);
+            if (!$token) {
+                return response()->json(['error' => 'No hay token'], 400);
+            }
+            
+            $mlService = new \App\Services\MercadoLibreService();
+            
+            $datos = $mlService->sincronizarProducto($producto->codigo_interno_ml);
+            
+            $producto->update([
+                'stock_full' => $datos['stock_full'],
+                'ventas_30_dias' => $datos['ventas_30_dias'],
+                'ml_ultimo_sync' => $datos['sincronizado_en'],
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'producto_id' => $producto->id,
+                'producto' => $producto->nombre,
+                'codigo_ml' => $producto->codigo_interno_ml,
+                'datos_ml' => $datos,
+                'actualizado' => [
+                    'stock_full' => $producto->fresh()->stock_full,
+                    'ventas_30_dias' => $producto->fresh()->ventas_30_dias,
+                ]
+            ], 200, [], JSON_PRETTY_PRINT);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ], 500, [], JSON_PRETTY_PRINT);
+        }
+    })->name('test.sync.producto');
+    
+    // Test de sincronización simple (primer producto)
     Route::get('/test-sync-simple', function () {
         try {
             $token = DB::table('mercadolibre_tokens')->find(1);
