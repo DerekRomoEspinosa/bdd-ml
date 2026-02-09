@@ -39,24 +39,24 @@ class Producto extends Model
         return $this->piezas_por_plancha * 2;
     }
 
-    // ✅ MEJORADO: Recomendación de fabricación basada en ventas mensuales reales
+    // ✅ NUEVA LÓGICA CONSERVADORA: Solo fabricar si realmente hace falta
     public function getRecomendacionFabricacionAttribute()
     {
-        // Si no tiene ventas, verificar si está debajo del stock mínimo
+        // Siempre verificar el stock mínimo
+        $faltanteMinimo = $this->stock_minimo - $this->stock_total;
+        
+        // Si NO tiene ventas, solo mantener stock mínimo
         if ($this->ventas_30_dias == 0) {
-            $faltante = $this->stock_minimo - $this->stock_total;
-            return max(0, $faltante);
+            return max(0, $faltanteMinimo);
         }
         
-        // Si tiene ventas, calcular para cubrir 30 días (1 mes)
-        $stockParaUnMes = $this->ventas_30_dias;
-        $necesario = $stockParaUnMes - $this->stock_total;
+        // Si tiene ventas, calcular un colchón del 15% de las ventas totales
+        $colchonSeguridad = ceil($this->ventas_30_dias * 0.15);
+        $stockDeseado = max($this->stock_minimo, $colchonSeguridad);
         
-        // Comparar con stock mínimo
-        $porVentas = max(0, ceil($necesario));
-        $porMinimo = max(0, $this->stock_minimo - $this->stock_total);
+        $faltante = $stockDeseado - $this->stock_total;
         
-        return max($porVentas, $porMinimo);
+        return max(0, $faltante);
     }
 
     // Para productos con variantes (bafles)

@@ -318,4 +318,12 @@
             }
         });
     </script>
+    <script>
+    // Auto-refresh después de sincronización
+    @if(session('success') && str_contains(session('success'), 'Sincronizados:'))
+        setTimeout(function() {
+            window.location.reload();
+        }, 3000); // Recargar después de 3 segundos
+    @endif
+</script>
 </x-app-layout>
