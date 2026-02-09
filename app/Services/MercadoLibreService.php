@@ -79,7 +79,7 @@ class MercadoLibreService
                     'stock_full' => $data['available_quantity'] ?? 0,
                     'ventas_30_dias' => $data['sold_quantity'] ?? 0,
                     'sincronizado_en' => now(),
-                    'status' => $data['status'] ?? 'unknown', // ← AGREGADO
+                    'status' => $data['status'] ?? 'unknown',
                 ];
                 
                 Log::info("[ML Service] ✓ {$itemId} - Status: {$result['status']}, Stock: {$result['stock_full']}, Ventas: {$result['ventas_30_dias']}");

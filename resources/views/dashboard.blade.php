@@ -40,51 +40,51 @@
             @endif
             
             {{-- BLOQUE DE CONEXIÓN MERCADO LIBRE --}}
-<div class="bg-white rounded-2xl shadow-lg p-6">
-    <div class="flex items-center justify-between">
-        <div class="flex items-center">
-            <div class="p-3 rounded-xl bg-gray-50 mr-4">
-                <svg class="h-6 w-6 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                </svg>
+            <div class="bg-white rounded-2xl shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <div class="p-3 rounded-xl bg-gray-50 mr-4">
+                            <svg class="h-6 w-6 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-gray-900">Mercado Libre API</h3>
+                            @php
+                                $token = DB::table('mercadolibre_tokens')->find(1);
+                                $tokenExpired = $token && now()->greaterThan(\Carbon\Carbon::parse($token->expires_at));
+                            @endphp
+                            
+                            @if(!$token)
+                                <p class="text-sm text-red-500">No vinculado. Los datos de ML no se actualizarán.</p>
+                            @elseif($tokenExpired)
+                                <p class="text-sm text-yellow-600">⚠️ Token expirado. Refresca para continuar sincronizando.</p>
+                            @else
+                                <p class="text-sm text-green-600">✅ Conectado. Expira: {{ \Carbon\Carbon::parse($token->expires_at)->diffForHumans() }}</p>
+                            @endif
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        @if(!$token)
+                            <a href="{{ route('ml.login') }}" 
+                               class="inline-flex items-center px-4 py-2 bg-white border border-gray-200 shadow-sm rounded-xl text-sm font-bold text-gray-900 hover:bg-gray-50">
+                                <span class="mr-2">🟡</span> Vincular Cuenta
+                            </a>
+                        @else
+                            <form action="{{ route('ml.refresh-token') }}" method="POST" class="inline">
+                                @csrf
+                                <button type="submit" 
+                                        class="inline-flex items-center px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white shadow-sm rounded-xl text-sm font-bold transition">
+                                    <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                    </svg>
+                                    Refrescar Token
+                                </button>
+                            </form>
+                        @endif
+                    </div>
+                </div>
             </div>
-            <div>
-                <h3 class="text-lg font-bold text-gray-900">Mercado Libre API</h3>
-                @php
-                    $token = DB::table('mercadolibre_tokens')->find(1);
-                    $tokenExpired = $token && now()->greaterThan(\Carbon\Carbon::parse($token->expires_at));
-                @endphp
-                
-                @if(!$token)
-                    <p class="text-sm text-red-500">No vinculado. Los datos de ML no se actualizarán.</p>
-                @elseif($tokenExpired)
-                    <p class="text-sm text-yellow-600">⚠️ Token expirado. Refresca para continuar sincronizando.</p>
-                @else
-                    <p class="text-sm text-green-600">✅ Conectado. Expira: {{ \Carbon\Carbon::parse($token->expires_at)->diffForHumans() }}</p>
-                @endif
-            </div>
-        </div>
-        <div class="flex gap-2">
-            @if(!$token)
-                <a href="{{ route('ml.login') }}" 
-                   class="inline-flex items-center px-4 py-2 bg-white border border-gray-200 shadow-sm rounded-xl text-sm font-bold text-gray-900 hover:bg-gray-50">
-                    <span class="mr-2">🟡</span> Vincular Cuenta
-                </a>
-            @else
-                <form action="{{ route('ml.refresh-token') }}" method="POST" class="inline">
-                    @csrf
-                    <button type="submit" 
-                            class="inline-flex items-center px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white shadow-sm rounded-xl text-sm font-bold transition">
-                        <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                        Refrescar Token
-                    </button>
-                </form>
-            @endif
-        </div>
-    </div>
-</div>
 
             {{-- Tarjetas de métricas --}}
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -222,74 +222,76 @@
             </div>
 
             {{-- Tabla de Productos Prioritarios --}}
-@if($productosPrioritarios->count() > 0)
-<div class="bg-white rounded-2xl shadow-lg overflow-hidden">
-    <div class="p-6">
-        <h3 class="text-lg font-semibold text-gray-900 mb-4">Productos Prioritarios para Fabricar</h3>
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock Actual</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fabricar</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridad</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    @foreach($productosPrioritarios as $producto)
-                    <tr class="hover:bg-gray-50 transition-colors">
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            {{-- ✅ SKU CLICKEABLE --}}
-                            <a href="{{ route('productos.edit', $producto) }}" 
-                               class="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline">
-                                {{ $producto->sku_ml }}
-                            </a>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            {{-- ✅ NOMBRE CLICKEABLE --}}
-                            <a href="{{ route('productos.edit', $producto) }}" 
-                               class="text-sm text-gray-900 hover:text-blue-600 hover:underline">
-                                {{ $producto->nombre }}
-                            </a>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {{ number_format($producto->stock_total) }}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                                {{ number_format($producto->recomendacion_fabricacion) }}
-                            </span>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="flex items-center">
-                                <div class="flex-1 bg-gray-200 rounded-full h-2 mr-2">
-                                    <div class="bg-red-600 h-2 rounded-full" style="width: {{ min(($producto->recomendacion_fabricacion / ($unidadesAFabricar > 0 ? $unidadesAFabricar : 1)) * 100, 100) }}%"></div>
-                                </div>
-                                <span class="text-sm text-gray-500">{{ round(($producto->recomendacion_fabricacion / ($unidadesAFabricar > 0 ? $unidadesAFabricar : 1)) * 100, 1) }}%</span>
-                            </div>
-                        </td>
-                    </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        </div>
-        
-        {{-- ✅ BOTÓN PARA VER TODOS --}}
-        <div class="mt-4 text-center">
-            <a href="{{ route('productos.index', ['filtro' => 'necesitan_fabricacion']) }}" 
-               class="inline-flex items-center px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition">
-                Ver todos los productos a fabricar
-                <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                </svg>
-            </a>
+            @if($productosPrioritarios->count() > 0)
+            <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+                <div class="p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Productos Prioritarios para Fabricar</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock Actual</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fabricar</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridad</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                @foreach($productosPrioritarios as $producto)
+                                <tr class="hover:bg-gray-50 transition-colors">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        {{-- ✅ SKU CLICKEABLE --}}
+                                        <a href="{{ route('productos.edit', $producto) }}" 
+                                           class="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline">
+                                            {{ $producto->sku_ml }}
+                                        </a>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        {{-- ✅ NOMBRE CLICKEABLE --}}
+                                        <a href="{{ route('productos.edit', $producto) }}" 
+                                           class="text-sm text-gray-900 hover:text-blue-600 hover:underline">
+                                            {{ $producto->nombre }}
+                                        </a>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {{ number_format($producto->stock_total) }}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                                            {{ number_format($producto->recomendacion_fabricacion) }}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <div class="flex-1 bg-gray-200 rounded-full h-2 mr-2">
+                                                <div class="bg-red-600 h-2 rounded-full" style="width: {{ min(($producto->recomendacion_fabricacion / ($unidadesAFabricar > 0 ? $unidadesAFabricar : 1)) * 100, 100) }}%"></div>
+                                            </div>
+                                            <span class="text-sm text-gray-500">{{ round(($producto->recomendacion_fabricacion / ($unidadesAFabricar > 0 ? $unidadesAFabricar : 1)) * 100, 1) }}%</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    {{-- ✅ BOTÓN PARA VER TODOS --}}
+                    <div class="mt-4 text-center">
+                        <a href="{{ route('productos.index', ['filtro' => 'necesitan_fabricacion']) }}" 
+                           class="inline-flex items-center px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition">
+                            Ver todos los productos a fabricar
+                            <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            @endif
+
         </div>
     </div>
-</div>
-@endif
-
 
     {{-- Script Chart.js --}}
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
