@@ -9,14 +9,12 @@ use Illuminate\Support\Facades\Log;
 class MercadoLibreService
 {
     private string $baseUrl = 'https://api.mercadolibre.com';
-    private ?int $sellerId = null;
 
     private function getToken()
     {
         $tokenData = DB::table('mercadolibre_tokens')->find(1);
         if (!$tokenData) return null;
 
-        // Si el token tiene más de 5 horas, lo refrescamos (duran 6)
         if (now()->diffInHours($tokenData->updated_at) >= 5) {
             return $this->refreshToken($tokenData->refresh_token);
         }
@@ -53,11 +51,6 @@ class MercadoLibreService
         return null;
     }
 
-    /**
-     * ✨ VERSIÓN OPTIMIZADA: Usa ML ID directamente
-     * 
-     * @param string $identificador Puede ser ML ID completo (MLM3113495728) o código interno
-     */
     public function sincronizarProducto(string $identificador): array
     {
         $token = $this->getToken();
@@ -66,24 +59,16 @@ class MercadoLibreService
             return [
                 'stock_full' => 0,
                 'ventas_30_dias' => 0,
-                'sincronizado_en' => now()
+                'sincronizado_en' => now(),
+                'status' => 'error'
             ];
         }
 
         try {
-            $itemId = null;
+            $itemId = str_starts_with(strtoupper($identificador), 'MLM') 
+                ? strtoupper($identificador) 
+                : 'MLM' . $identificador;
             
-            // ✅ ESTRATEGIA: Si empieza con "MLM", es el ID directo
-            if (str_starts_with(strtoupper($identificador), 'MLM')) {
-                $itemId = strtoupper($identificador);
-                Log::info("[ML Service] Usando ML ID directo: {$itemId}");
-            } else {
-                // Si no empieza con MLM, intentar agregar el prefijo
-                $itemId = 'MLM' . $identificador;
-                Log::info("[ML Service] Intentando con prefijo MLM: {$itemId}");
-            }
-            
-            // Obtener datos del item
             Log::info("[ML Service] Consultando item: {$itemId}");
             $response = Http::withToken($token)->get("{$this->baseUrl}/items/{$itemId}");
             
@@ -94,24 +79,25 @@ class MercadoLibreService
                     'stock_full' => $data['available_quantity'] ?? 0,
                     'ventas_30_dias' => $data['sold_quantity'] ?? 0,
                     'sincronizado_en' => now(),
+                    'status' => $data['status'] ?? 'unknown', // ← AGREGADO
                 ];
                 
-                Log::info("[ML Service] ✓ {$itemId} - Status: {$data['status']}, Stock: {$result['stock_full']}, Ventas: {$result['ventas_30_dias']}");
+                Log::info("[ML Service] ✓ {$itemId} - Status: {$result['status']}, Stock: {$result['stock_full']}, Ventas: {$result['ventas_30_dias']}");
                 
                 return $result;
             } else {
-                Log::error("[ML Service] API error para {$itemId}: " . $response->status() . " - " . $response->body());
+                Log::error("[ML Service] API error para {$itemId}: " . $response->status());
             }
             
         } catch (\Exception $e) {
             Log::error("[ML Service] Exception para {$identificador}: " . $e->getMessage());
-            Log::error("[ML Service] Trace: " . $e->getTraceAsString());
         }
 
         return [
             'stock_full' => 0,
             'ventas_30_dias' => 0,
-            'sincronizado_en' => now()
+            'sincronizado_en' => now(),
+            'status' => 'error'
         ];
     }
 }
