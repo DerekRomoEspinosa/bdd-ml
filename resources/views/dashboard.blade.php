@@ -222,51 +222,73 @@
             </div>
 
             {{-- Tabla de Productos Prioritarios --}}
-            @if($productosPrioritarios->count() > 0)
-            <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
-                <div class="p-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Productos Prioritarios para Fabricar</h3>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock Actual</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fabricar</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridad</th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
-                                @foreach($productosPrioritarios as $producto)
-                                <tr class="hover:bg-gray-50">
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ $producto->sku_ml }}</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $producto->nombre }}</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ number_format($producto->stock_total) }}</td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <span class="px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                                            {{ number_format($producto->recomendacion_fabricacion) }}
-                                        </span>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="flex items-center">
-                                            <div class="flex-1 bg-gray-200 rounded-full h-2 mr-2">
-                                                <div class="bg-red-600 h-2 rounded-full" style="width: {{ min(($producto->recomendacion_fabricacion / ($unidadesAFabricar > 0 ? $unidadesAFabricar : 1)) * 100, 100) }}%"></div>
-                                            </div>
-                                            <span class="text-sm text-gray-500">{{ round(($producto->recomendacion_fabricacion / ($unidadesAFabricar > 0 ? $unidadesAFabricar : 1)) * 100, 1) }}%</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-            @endif
-
+@if($productosPrioritarios->count() > 0)
+<div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+    <div class="p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Productos Prioritarios para Fabricar</h3>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock Actual</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fabricar</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridad</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    @foreach($productosPrioritarios as $producto)
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {{-- ✅ SKU CLICKEABLE --}}
+                            <a href="{{ route('productos.edit', $producto) }}" 
+                               class="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline">
+                                {{ $producto->sku_ml }}
+                            </a>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {{-- ✅ NOMBRE CLICKEABLE --}}
+                            <a href="{{ route('productos.edit', $producto) }}" 
+                               class="text-sm text-gray-900 hover:text-blue-600 hover:underline">
+                                {{ $producto->nombre }}
+                            </a>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ number_format($producto->stock_total) }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                                {{ number_format($producto->recomendacion_fabricacion) }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="flex-1 bg-gray-200 rounded-full h-2 mr-2">
+                                    <div class="bg-red-600 h-2 rounded-full" style="width: {{ min(($producto->recomendacion_fabricacion / ($unidadesAFabricar > 0 ? $unidadesAFabricar : 1)) * 100, 100) }}%"></div>
+                                </div>
+                                <span class="text-sm text-gray-500">{{ round(($producto->recomendacion_fabricacion / ($unidadesAFabricar > 0 ? $unidadesAFabricar : 1)) * 100, 1) }}%</span>
+                            </div>
+                        </td>
+                    </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+        
+        {{-- ✅ BOTÓN PARA VER TODOS --}}
+        <div class="mt-4 text-center">
+            <a href="{{ route('productos.index', ['filtro' => 'necesitan_fabricacion']) }}" 
+               class="inline-flex items-center px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition">
+                Ver todos los productos a fabricar
+                <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+            </a>
         </div>
     </div>
+</div>
+@endif
 
     {{-- Script Chart.js --}}
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>

@@ -20,11 +20,10 @@ class Producto extends Model
         'piezas_por_plancha' => 'integer',
     ];
 
-    // Cálculo automático de Stock Total
+    // ✅ ARREGLADO: Stock Total = Bodega + Enviado Full + Full
     public function getStockTotalAttribute()
     {
-        return $this->stock_bodega + $this->stock_cortado + $this->stock_costura          
-             + $this->stock_por_empacar + $this->stock_enviado_full + ($this->stock_full ?? 0);
+        return $this->stock_bodega + $this->stock_enviado_full + ($this->stock_full ?? 0);
     }
 
     // Consumo Diario (Ventas / 30)
@@ -33,13 +32,13 @@ class Producto extends Model
         return $this->ventas_30_dias ? round($this->ventas_30_dias / 30, 2) : 0;
     }
 
-    // ✨ NUEVA LÓGICA: Stock mínimo = 2 × piezas_por_plancha
+    // Stock mínimo = 2 × piezas_por_plancha
     public function getStockMinimoAttribute(): int
     {
         return $this->piezas_por_plancha * 2;
     }
 
-    // ✨ NUEVA LÓGICA: Recomendación de fabricación
+    // Recomendación de fabricación
     public function getRecomendacionFabricacionAttribute()
     {
         // Si no tiene ventas, verificar si está debajo del stock mínimo
@@ -59,7 +58,7 @@ class Producto extends Model
         return max($porVentas, $porMinimo);
     }
 
-    // ✨ Para productos con variantes (bafles)
+    // Para productos con variantes (bafles)
     public function getVentasVarianteAttribute()
     {
         if (!$this->variante_bafle) {

@@ -129,92 +129,77 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('productos.sincronizar-ml-background');
 
     // ============================================
-// SINCRONIZACIÓN DIRECTA (SIN JOBS) - TODOS LOS PRODUCTOS
+// SINCRONIZACIÓN DIRECTA OPTIMIZADA
 // ============================================
 Route::post('productos/sync-ml-directo', function () {
     try {
-        $inicio = now();
-        
-        Log::info("🎯 [Sync Directo] Iniciando");
-        
-        // Verificar token
         $token = DB::table('mercadolibre_tokens')->find(1);
         if (!$token) {
             return redirect()->route('dashboard')
                 ->with('error', '❌ No hay token de ML.');
         }
         
-        // ✨ OBTENER TODOS LOS PRODUCTOS (sin limit)
-        // Primero los activos, luego los pausados al final
-        $productos = \App\Models\Producto::where('activo', true)
+        // Contar productos a sincronizar
+        $totalProductos = \App\Models\Producto::where('activo', true)
             ->whereNotNull('codigo_interno_ml')
             ->where('codigo_interno_ml', '!=', '')
-            ->orderByRaw("CASE 
-                WHEN codigo_interno_ml LIKE 'MLM%' THEN 0 
-                ELSE 1 
-            END")
-            ->get(); // ← SIN LIMIT
+            ->count();
         
-        if ($productos->isEmpty()) {
+        if ($totalProductos === 0) {
             return redirect()->route('dashboard')
                 ->with('warning', '⚠️ No hay productos con código interno ML.');
         }
         
-        Log::info("[Sync Directo] Productos a sincronizar: " . $productos->count());
-        
-        $sincronizados = 0;
-        $errores = 0;
-        $pausados = 0;
-        
-        foreach ($productos as $producto) {
-            try {
-                $mlService = new \App\Services\MercadoLibreService();
-                
-                Log::info("[Sync Directo] → Sincronizando producto ID {$producto->id} con código {$producto->codigo_interno_ml}");
-                
-                $datos = $mlService->sincronizarProducto($producto->codigo_interno_ml);
-                
-                // ✨ Detectar si está pausado
-                $estaPausado = isset($datos['status']) && $datos['status'] === 'paused';
-                if ($estaPausado) {
-                    $pausados++;
+        // ✅ Si son menos de 100 productos, sincronizar directo (rápido)
+        if ($totalProductos <= 100) {
+            Log::info("🎯 [Sync Directo] Sincronización directa de {$totalProductos} productos");
+            
+            $productos = \App\Models\Producto::where('activo', true)
+                ->whereNotNull('codigo_interno_ml')
+                ->where('codigo_interno_ml', '!=', '')
+                ->get();
+            
+            $sincronizados = 0;
+            $pausados = 0;
+            
+            foreach ($productos as $producto) {
+                try {
+                    $mlService = new \App\Services\MercadoLibreService();
+                    $datos = $mlService->sincronizarProducto($producto->codigo_interno_ml);
+                    
+                    if (isset($datos['status']) && $datos['status'] === 'paused') {
+                        $pausados++;
+                    }
+                    
+                    $producto->update([
+                        'stock_full' => $datos['stock_full'],
+                        'ventas_30_dias' => $datos['ventas_30_dias'],
+                        'ml_ultimo_sync' => $datos['sincronizado_en'],
+                    ]);
+                    
+                    $sincronizados++;
+                    usleep(200000); // 200ms entre productos
+                    
+                } catch (\Exception $e) {
+                    Log::error("[Sync Directo] Error en producto {$producto->id}: " . $e->getMessage());
                 }
-                
-                Log::info("[Sync Directo] → Datos recibidos para {$producto->codigo_interno_ml}", $datos);
-                
-                $producto->update([
-                    'stock_full' => $datos['stock_full'],
-                    'ventas_30_dias' => $datos['ventas_30_dias'],
-                    'ml_ultimo_sync' => $datos['sincronizado_en'],
-                ]);
-                
-                $sincronizados++;
-                
-                Log::info("[Sync Directo] ✓ Producto {$producto->id} actualizado - Stock: {$datos['stock_full']}, Ventas: {$datos['ventas_30_dias']}");
-                
-                // Pausa de 300ms entre productos
-                usleep(300000);
-                
-            } catch (\Exception $e) {
-                $errores++;
-                Log::error("[Sync Directo] ✗ Error en producto {$producto->id} (código {$producto->codigo_interno_ml}): {$e->getMessage()}");
             }
+            
+            $mensaje = "✅ Sincronizados: {$sincronizados} productos";
+            if ($pausados > 0) $mensaje .= " | ⏸️ Pausados: {$pausados}";
+            
+            return redirect()->route('dashboard')->with('success', $mensaje);
         }
         
-        $tiempoTotal = $inicio->diffInSeconds(now());
+        // ✅ Si son más de 100, usar Jobs en background
+        Log::info("🎯 [Sync Background] Iniciando sincronización en cola de {$totalProductos} productos");
+        \App\Jobs\SincronizarProductosMLMaestro::dispatch();
         
-        Log::info("[Sync Directo] ✅ Completado - Sincronizados: {$sincronizados}, Errores: {$errores}, Pausados: {$pausados}, Tiempo: {$tiempoTotal}s");
-        
-        $mensaje = "✅ Sincronizados: {$sincronizados} productos";
-        if ($pausados > 0) $mensaje .= " | ⏸️ Pausados: {$pausados}";
-        if ($errores > 0) $mensaje .= " | ⚠️ Errores: {$errores}";
-        $mensaje .= " | ⏱️ " . gmdate("i:s", $tiempoTotal);
-        
-        return redirect()->route('dashboard')->with('success', $mensaje);
+        return redirect()->route('dashboard')
+            ->with('success', "🚀 Sincronización de {$totalProductos} productos iniciada en segundo plano. Esto tomará unos minutos.");
         
     } catch (\Exception $e) {
-        Log::error('[Sync Directo] ❌ Error crítico: ' . $e->getMessage());
-        Log::error('[Sync Directo] Trace: ' . $e->getTraceAsString());
+        Log::error('[Sync] Error: ' . $e->getMessage());
         return redirect()->route('dashboard')->with('error', '❌ Error: ' . $e->getMessage());
     }
 })->name('productos.sync-ml-directo');
