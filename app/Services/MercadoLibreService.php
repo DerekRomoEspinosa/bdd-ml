@@ -51,6 +51,9 @@ class MercadoLibreService
         return null;
     }
 
+    /**
+     * ✅ MEJORADO: Calcula ventas mensuales promedio en lugar de ventas totales
+     */
     public function sincronizarProducto(string $identificador): array
     {
         $token = $this->getToken();
@@ -59,6 +62,7 @@ class MercadoLibreService
             return [
                 'stock_full' => 0,
                 'ventas_30_dias' => 0,
+                'ml_published_at' => null,
                 'sincronizado_en' => now(),
                 'status' => 'error'
             ];
@@ -75,14 +79,27 @@ class MercadoLibreService
             if ($response->successful()) {
                 $data = $response->json();
                 
+                // ✅ Calcular ventas mensuales estimadas
+                $soldQuantity = $data['sold_quantity'] ?? 0;
+                $publishedAt = isset($data['date_created']) ? \Carbon\Carbon::parse($data['date_created']) : null;
+                
+                $ventasMensuales = 0;
+                if ($publishedAt && $soldQuantity > 0) {
+                    $mesesDesdePublicacion = max(1, $publishedAt->diffInMonths(now()));
+                    $ventasMensuales = round($soldQuantity / $mesesDesdePublicacion);
+                    
+                    Log::info("[ML Service] Cálculo ventas: {$soldQuantity} ventas totales / {$mesesDesdePublicacion} meses = {$ventasMensuales} ventas/mes");
+                }
+                
                 $result = [
                     'stock_full' => $data['available_quantity'] ?? 0,
-                    'ventas_30_dias' => $data['sold_quantity'] ?? 0,
+                    'ventas_30_dias' => $ventasMensuales, // ✅ PROMEDIO MENSUAL
+                    'ml_published_at' => $publishedAt,
                     'sincronizado_en' => now(),
                     'status' => $data['status'] ?? 'unknown',
                 ];
                 
-                Log::info("[ML Service] ✓ {$itemId} - Status: {$result['status']}, Stock: {$result['stock_full']}, Ventas: {$result['ventas_30_dias']}");
+                Log::info("[ML Service] ✓ {$itemId} - Status: {$result['status']}, Stock: {$result['stock_full']}, Ventas/mes: {$result['ventas_30_dias']} (total histórico: {$soldQuantity})");
                 
                 return $result;
             } else {
@@ -96,6 +113,7 @@ class MercadoLibreService
         return [
             'stock_full' => 0,
             'ventas_30_dias' => 0,
+            'ml_published_at' => null,
             'sincronizado_en' => now(),
             'status' => 'error'
         ];

@@ -24,7 +24,7 @@ Route::get('mercadolibre/callback', [MLAuthController::class, 'callback'])
 // RUTAS PROTEGIDAS POR AUTENTICACIÓN
 // ============================================
 Route::middleware(['auth', 'verified'])->group(function () {
-    
+
     // Dashboard
     Route::get('/dashboard', function () {
         $productos = \App\Models\Producto::where('activo', true)->get();
@@ -32,15 +32,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
         $stockTotal = $productos->sum('stock_total');
         $productosNecesitanFabricacion = $productos->where('recomendacion_fabricacion', '>', 0)->count();
         $unidadesAFabricar = $productos->sum('recomendacion_fabricacion');
-        
+
         $productosPrioritarios = $productos
             ->where('recomendacion_fabricacion', '>', 0)
             ->sortByDesc('recomendacion_fabricacion')
             ->take(10);
-        
+
         return view('dashboard', compact(
-            'productos', 'totalProductos', 'stockTotal', 
-            'productosNecesitanFabricacion', 'unidadesAFabricar', 'productosPrioritarios'
+            'productos',
+            'totalProductos',
+            'stockTotal',
+            'productosNecesitanFabricacion',
+            'unidadesAFabricar',
+            'productosPrioritarios'
         ));
     })->name('dashboard');
 
@@ -48,79 +52,77 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-    
+
     // ============================================
     // CRUD DE PRODUCTOS
     // ============================================
     Route::resource('productos', ProductoController::class);
-    
+
     // ============================================
     // MERCADO LIBRE
     // ============================================
-    
+
     // Iniciar OAuth con Mercado Libre
     Route::get('mercadolibre/auth', [MLAuthController::class, 'redirectToML'])
         ->name('ml.login');
-    
+
     // Refrescar token de ML manualmente
     Route::post('/ml/refresh-token', function () {
         try {
             $tokenData = DB::table('mercadolibre_tokens')->find(1);
-            
+
             if (!$tokenData) {
                 return redirect()->back()->with('error', '❌ No hay token para refrescar');
             }
-            
+
             $response = Http::asForm()->post('https://api.mercadolibre.com/oauth/token', [
                 'grant_type' => 'refresh_token',
                 'client_id' => env('ML_CLIENT_ID'),
                 'client_secret' => env('ML_CLIENT_SECRET'),
                 'refresh_token' => $tokenData->refresh_token,
             ]);
-            
+
             if (!$response->successful()) {
                 return redirect()->back()->with('error', '❌ Error refrescando token: ' . $response->body());
             }
-            
+
             $data = $response->json();
-            
+
             DB::table('mercadolibre_tokens')->where('id', 1)->update([
                 'access_token' => $data['access_token'],
                 'refresh_token' => $data['refresh_token'] ?? $tokenData->refresh_token,
                 'updated_at' => now(),
                 'expires_at' => now()->addHours(6),
             ]);
-            
+
             return redirect()->back()->with('success', '✅ Token refrescado correctamente');
-            
         } catch (\Exception $e) {
             return redirect()->back()->with('error', '❌ Error: ' . $e->getMessage());
         }
     })->name('ml.refresh-token');
-    
+
     // Sincronización individual
     Route::post('productos/{producto}/sincronizar', [ProductoController::class, 'sincronizar'])
         ->name('productos.sincronizar');
-    
+
     // Sincronizar todos los productos
     Route::post('productos/sincronizar-todos', [ProductoController::class, 'sincronizarTodos'])
         ->name('productos.sincronizar-todos');
-    
+
     // Sincronización en background (con Jobs)
     Route::post('productos/sincronizar-ml-background', function () {
         try {
             $token = DB::table('mercadolibre_tokens')->find(1);
-            
+
             if (!$token) {
                 return redirect()->route('dashboard')
                     ->with('error', '❌ No hay token de ML. Vincula tu cuenta primero.');
             }
-            
+
             \App\Jobs\SincronizarProductosMLMaestro::dispatch();
-            
+
             return redirect()->route('dashboard')
                 ->with('success', '🚀 Sincronización iniciada en segundo plano.');
-                
         } catch (\Exception $e) {
             Log::error('[Sync Background] Error: ' . $e->getMessage());
             return redirect()->route('dashboard')
@@ -138,73 +140,73 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 return redirect()->route('dashboard')
                     ->with('error', '❌ No hay token de ML.');
             }
-            
+
             // Contar productos a sincronizar
             $totalProductos = \App\Models\Producto::where('activo', true)
                 ->whereNotNull('codigo_interno_ml')
                 ->where('codigo_interno_ml', '!=', '')
                 ->count();
-            
+
             if ($totalProductos === 0) {
                 return redirect()->route('dashboard')
                     ->with('warning', '⚠️ No hay productos con código interno ML.');
             }
-            
+
             // ✅ Si son menos de 100 productos, sincronizar directo (rápido)
             if ($totalProductos <= 100) {
                 $inicio = now();
                 Log::info("🎯 [Sync Directo] Sincronización directa de {$totalProductos} productos");
-                
+
                 $productos = \App\Models\Producto::where('activo', true)
                     ->whereNotNull('codigo_interno_ml')
                     ->where('codigo_interno_ml', '!=', '')
                     ->get();
-                
+
                 $sincronizados = 0;
                 $pausados = 0;
                 $errores = 0;
-                
+
                 foreach ($productos as $producto) {
                     try {
                         $mlService = new \App\Services\MercadoLibreService();
                         $datos = $mlService->sincronizarProducto($producto->codigo_interno_ml);
-                        
+
                         if (isset($datos['status']) && $datos['status'] === 'paused') {
                             $pausados++;
                         }
-                        
+
                         $producto->update([
                             'stock_full' => $datos['stock_full'],
                             'ventas_30_dias' => $datos['ventas_30_dias'],
+                            'ml_published_at' => $datos['ml_published_at'] ?? null, // ← NUEVA LÍNEA
                             'ml_ultimo_sync' => $datos['sincronizado_en'],
                         ]);
-                        
+
                         $sincronizados++;
                         usleep(200000); // 200ms entre productos
-                        
+
                     } catch (\Exception $e) {
                         $errores++;
                         Log::error("[Sync Directo] Error en producto {$producto->id}: " . $e->getMessage());
                     }
                 }
-                
+
                 $tiempoTotal = $inicio->diffInSeconds(now());
-                
+
                 $mensaje = "✅ Sincronizados: {$sincronizados} productos";
                 if ($pausados > 0) $mensaje .= " | ⏸️ Pausados: {$pausados}";
                 if ($errores > 0) $mensaje .= " | ⚠️ Errores: {$errores}";
                 $mensaje .= " | ⏱️ " . gmdate("i:s", $tiempoTotal);
-                
+
                 return redirect()->route('dashboard')->with('success', $mensaje);
             }
-            
+
             // ✅ Si son más de 100, usar Jobs en background
             Log::info("🎯 [Sync Background] Iniciando sincronización en cola de {$totalProductos} productos");
             \App\Jobs\SincronizarProductosMLMaestro::dispatch();
-            
+
             return redirect()->route('dashboard')
                 ->with('success', "🚀 Sincronización de {$totalProductos} productos iniciada en segundo plano. Esto tomará unos minutos.");
-            
         } catch (\Exception $e) {
             Log::error('[Sync] Error: ' . $e->getMessage());
             return redirect()->route('dashboard')->with('error', '❌ Error: ' . $e->getMessage());
@@ -220,11 +222,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('productos.import');
     Route::get('productos-export', [ExcelController::class, 'export'])
         ->name('productos.export');
-    
+
     // ============================================
     // MAPEO DE CÓDIGOS ML
     // ============================================
-    
+
     // Vista del formulario de mapeo
     Route::get('admin/mapear-ml', function () {
         $tokenData = DB::table('mercadolibre_tokens')->find(1);
@@ -234,42 +236,41 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->where('codigo_interno_ml', '!=', '')
             ->count();
         $sinCodigo = $totalProductos - $conCodigo;
-        
+
         return view('admin.mapear-ml', compact('tokenData', 'totalProductos', 'conCodigo', 'sinCodigo'));
     })->name('admin.mapear-ml');
-    
+
     // Ejecutar mapeo
     Route::post('admin/mapear-ml/ejecutar', function (\Illuminate\Http\Request $request) {
         $limit = $request->input('limit', 50);
-        
+
         try {
             // Ejecutar comando y capturar output
             \Illuminate\Support\Facades\Artisan::call('ml:mapear-codigos', [
                 '--limit' => $limit
             ]);
-            
+
             $output = \Illuminate\Support\Facades\Artisan::output();
-            
+
             return redirect()
                 ->route('admin.mapear-ml')
                 ->with('success', '✅ Mapeo completado correctamente')
                 ->with('output', $output);
-                
         } catch (\Exception $e) {
             return redirect()
                 ->route('admin.mapear-ml')
                 ->with('error', '❌ Error: ' . $e->getMessage());
         }
     })->name('admin.mapear-ml.ejecutar');
-    
+
     // ============================================
     // RUTAS DE DEBUG
     // ============================================
-    
+
     // Verificar token ML
     Route::get('/test-ml-token', function () {
         $token = DB::table('mercadolibre_tokens')->find(1);
-        
+
         return response()->json([
             'timestamp' => now()->toDateTimeString(),
             'token_existe' => $token ? '✅ SÍ' : '❌ NO',
@@ -280,7 +281,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ] : null
         ], 200, [], JSON_PRETTY_PRINT);
     })->name('test.ml');
-    
+
     // Ver productos con codigo_interno_ml
     Route::get('/debug-ml-products', function () {
         $productos = \App\Models\Producto::where('activo', true)
@@ -288,38 +289,38 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->where('codigo_interno_ml', '!=', '')
             ->select('id', 'nombre', 'codigo_interno_ml', 'stock_full', 'ventas_30_dias', 'ml_ultimo_sync')
             ->get();
-        
+
         return response()->json([
             'total_activos' => \App\Models\Producto::where('activo', true)->count(),
             'con_codigo_ml' => $productos->count(),
             'productos' => $productos
         ], 200, [], JSON_PRETTY_PRINT);
     })->name('debug.ml.products');
-    
+
     // Probar con un producto específico por ID de BD
     Route::get('/test-sync-producto/{id}', function ($id) {
         try {
             $producto = \App\Models\Producto::findOrFail($id);
-            
+
             if (!$producto->codigo_interno_ml) {
                 return response()->json(['error' => 'Este producto no tiene código interno ML'], 404);
             }
-            
+
             $token = DB::table('mercadolibre_tokens')->find(1);
             if (!$token) {
                 return response()->json(['error' => 'No hay token'], 400);
             }
-            
+
             $mlService = new \App\Services\MercadoLibreService();
-            
+
             $datos = $mlService->sincronizarProducto($producto->codigo_interno_ml);
-            
+
             $producto->update([
                 'stock_full' => $datos['stock_full'],
                 'ventas_30_dias' => $datos['ventas_30_dias'],
                 'ml_ultimo_sync' => $datos['sincronizado_en'],
             ]);
-            
+
             return response()->json([
                 'success' => true,
                 'producto_id' => $producto->id,
@@ -331,7 +332,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
                     'ventas_30_dias' => $producto->fresh()->ventas_30_dias,
                 ]
             ], 200, [], JSON_PRETTY_PRINT);
-            
         } catch (\Exception $e) {
             return response()->json([
                 'error' => $e->getMessage(),
@@ -340,7 +340,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ], 500, [], JSON_PRETTY_PRINT);
         }
     })->name('test.sync.producto');
-    
+
     // Test de sincronización simple (primer producto)
     Route::get('/test-sync-simple', function () {
         try {
@@ -348,26 +348,26 @@ Route::middleware(['auth', 'verified'])->group(function () {
             if (!$token) {
                 return response()->json(['error' => 'No hay token'], 400);
             }
-            
+
             $mlService = new \App\Services\MercadoLibreService();
-            
+
             $producto = \App\Models\Producto::where('activo', true)
                 ->whereNotNull('codigo_interno_ml')
                 ->where('codigo_interno_ml', '!=', '')
                 ->first();
-            
+
             if (!$producto) {
                 return response()->json(['error' => 'No hay productos con código ML'], 404);
             }
-            
+
             $datos = $mlService->sincronizarProducto($producto->codigo_interno_ml);
-            
+
             $producto->update([
                 'stock_full' => $datos['stock_full'],
                 'ventas_30_dias' => $datos['ventas_30_dias'],
                 'ml_ultimo_sync' => $datos['sincronizado_en'],
             ]);
-            
+
             return response()->json([
                 'success' => true,
                 'producto' => $producto->nombre,
@@ -378,7 +378,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
                     'ventas_30_dias' => $producto->fresh()->ventas_30_dias,
                 ]
             ], 200, [], JSON_PRETTY_PRINT);
-            
         } catch (\Exception $e) {
             return response()->json([
                 'error' => $e->getMessage(),
@@ -386,19 +385,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ], 500, [], JSON_PRETTY_PRINT);
         }
     })->name('test.sync.simple');
-    
+
     // Ver datos RAW de un item específico en ML
     Route::get('/debug-ml-item/{itemId}', function ($itemId) {
         try {
             $token = DB::table('mercadolibre_tokens')->find(1);
-            
+
             if (!$token) {
                 return response()->json(['error' => 'No hay token de ML'], 401);
             }
-            
+
             $response = Http::withToken($token->access_token)
                 ->get("https://api.mercadolibre.com/items/{$itemId}");
-            
+
             if (!$response->successful()) {
                 return response()->json([
                     'error' => 'Error de ML API',
@@ -406,9 +405,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
                     'body' => $response->body()
                 ], $response->status(), [], JSON_PRETTY_PRINT);
             }
-            
+
             $data = $response->json();
-            
+
             return response()->json([
                 'item_id' => $itemId,
                 'status' => $data['status'] ?? 'N/A',
@@ -421,7 +420,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 'permalink' => $data['permalink'] ?? 'N/A',
                 'datos_completos' => $data
             ], 200, [], JSON_PRETTY_PRINT);
-            
         } catch (\Exception $e) {
             return response()->json([
                 'error' => $e->getMessage(),
@@ -429,49 +427,49 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ], 500, [], JSON_PRETTY_PRINT);
         }
     })->name('debug.ml.item');
-    
+
     // Ver TODOS los items del seller
     Route::get('/debug-ml-all-items', function () {
         try {
             $token = DB::table('mercadolibre_tokens')->find(1);
-            
+
             if (!$token) {
                 return response()->json(['error' => 'No hay token de ML'], 401);
             }
-            
+
             // Obtener seller ID
             $userResponse = Http::withToken($token->access_token)
                 ->get("https://api.mercadolibre.com/users/me");
-            
+
             if (!$userResponse->successful()) {
                 return response()->json(['error' => 'No se pudo obtener seller ID'], 500);
             }
-            
+
             $sellerId = $userResponse->json()['id'];
-            
+
             // Obtener items del seller
             $response = Http::withToken($token->access_token)
                 ->get("https://api.mercadolibre.com/users/{$sellerId}/items/search", [
                     'status' => 'active',
                     'limit' => 50
                 ]);
-            
+
             if (!$response->successful()) {
                 return response()->json([
                     'error' => 'Error obteniendo items',
                     'status' => $response->status()
                 ], $response->status());
             }
-            
+
             $data = $response->json();
             $itemIds = $data['results'] ?? [];
-            
+
             // Obtener detalles de los primeros 10 items
             $itemsConDetalles = [];
             foreach (array_slice($itemIds, 0, 10) as $itemId) {
                 $itemResponse = Http::withToken($token->access_token)
                     ->get("https://api.mercadolibre.com/items/{$itemId}");
-                
+
                 if ($itemResponse->successful()) {
                     $itemData = $itemResponse->json();
                     $itemsConDetalles[] = [
@@ -483,17 +481,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
                         'status' => $itemData['status'] ?? 'N/A',
                     ];
                 }
-                
+
                 usleep(100000); // Pausa de 100ms
             }
-            
+
             return response()->json([
                 'seller_id' => $sellerId,
                 'total_items' => count($itemIds),
                 'primeros_10_items' => $itemsConDetalles,
                 'todos_los_item_ids' => $itemIds
             ], 200, [], JSON_PRETTY_PRINT);
-            
         } catch (\Exception $e) {
             return response()->json([
                 'error' => $e->getMessage()
@@ -502,4 +499,4 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('debug.ml.all.items');
 });
 
-require __DIR__.'/auth.php';
+require __DIR__ . '/auth.php';

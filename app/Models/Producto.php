@@ -11,12 +11,13 @@ class Producto extends Model
         'plantilla_corte_url', 'piezas_por_plancha', 'variante_bafle',
         'stock_bodega', 'stock_cortado', 'stock_costura', 
         'stock_por_empacar', 'stock_enviado_full',
-        'stock_full', 'ventas_30_dias', 'ml_ultimo_sync', 'activo',
+        'stock_full', 'ventas_30_dias', 'ml_published_at', 'ml_ultimo_sync', 'activo',
     ];
 
     protected $casts = [
         'activo' => 'boolean',
         'ml_ultimo_sync' => 'datetime',
+        'ml_published_at' => 'datetime',
         'piezas_por_plancha' => 'integer',
     ];
 
@@ -38,7 +39,7 @@ class Producto extends Model
         return $this->piezas_por_plancha * 2;
     }
 
-    // Recomendación de fabricación
+    // ✅ MEJORADO: Recomendación de fabricación basada en ventas mensuales reales
     public function getRecomendacionFabricacionAttribute()
     {
         // Si no tiene ventas, verificar si está debajo del stock mínimo
@@ -47,9 +48,9 @@ class Producto extends Model
             return max(0, $faltante);
         }
         
-        // Si tiene ventas, calcular para cubrir 15 días
-        $stockParaQuinceDias = ($this->ventas_30_dias / 30) * 15;
-        $necesario = $stockParaQuinceDias - $this->stock_total;
+        // Si tiene ventas, calcular para cubrir 30 días (1 mes)
+        $stockParaUnMes = $this->ventas_30_dias;
+        $necesario = $stockParaUnMes - $this->stock_total;
         
         // Comparar con stock mínimo
         $porVentas = max(0, ceil($necesario));
