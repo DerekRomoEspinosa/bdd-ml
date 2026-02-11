@@ -30,7 +30,9 @@ class ExcelImportService
                 // Leer datos de las columnas importantes (Estructura de Carlos)
                 $modelo = $this->getCellValue($worksheet, 'A', $row); // Modelo
                 $nombre = $this->getCellValue($worksheet, 'C', $row); // Nombre Genérico
-                $plantillaCorteUrl = $this->getCellValue($worksheet, 'U', $row); // ✨ NUEVO: Plantilla de corte (columna U)
+                $plantillaCorteUrl = $this->getCellValue($worksheet, 'U', $row); // Plantilla de corte (columna U)
+                $piezasPorPlancha = (int) $this->getCellValue($worksheet, 'V', $row); // ✅ NUEVO: Piezas por plancha (columna V)
+                $stockMinimoDeseado = (int) $this->getCellValue($worksheet, 'W', $row); // ✅ NUEVO: Stock mínimo (columna W)
                 $skuMl = $this->getCellValue($worksheet, 'AS', $row); // SKU ML (columna AS)
                 $codigoInternoMl = $this->getCellValue($worksheet, 'AY', $row); // Código interno ML (columna AY)
                 
@@ -69,15 +71,17 @@ class ExcelImportService
                     'stock_bodega' => $stockBodega,
                     'stock_cortado' => $stockCortado,
                     'stock_enviado_full' => $stockEnviadoFull,
+                    'piezas_por_plancha' => $piezasPorPlancha > 0 ? $piezasPorPlancha : 4, // ✅ Default 4
+                    'stock_minimo_deseado' => $stockMinimoDeseado, // ✅ NUEVO
                     'activo' => true,
                 ];
 
-                // ✨ Agregar codigo_interno_ml si no está vacío
+                // Agregar codigo_interno_ml si no está vacío
                 if (!empty($codigoInternoMl)) {
                     $datosProducto['codigo_interno_ml'] = $codigoInternoMl;
                 }
 
-                // ✨ NUEVO: Agregar plantilla_corte_url si no está vacío
+                // Agregar plantilla_corte_url si no está vacío
                 if (!empty($plantillaCorteUrl)) {
                     $datosProducto['plantilla_corte_url'] = $plantillaCorteUrl;
                 }
@@ -90,8 +94,8 @@ class ExcelImportService
                     Log::info("✓ Producto actualizado", [
                         'id' => $producto->id,
                         'modelo' => $modelo,
+                        'stock_minimo' => $stockMinimoDeseado,
                         'codigo_interno_ml' => $codigoInternoMl ?? 'sin código',
-                        'tiene_plantilla' => !empty($plantillaCorteUrl) ? 'sí' : 'no'
                     ]);
                 } else {
                     // Crear nuevo producto
@@ -101,8 +105,8 @@ class ExcelImportService
                     Log::info("✓ Producto creado", [
                         'id' => $nuevoProducto->id,
                         'modelo' => $modelo,
+                        'stock_minimo' => $stockMinimoDeseado,
                         'codigo_interno_ml' => $codigoInternoMl ?? 'sin código',
-                        'tiene_plantilla' => !empty($plantillaCorteUrl) ? 'sí' : 'no'
                     ]);
                 }
 
