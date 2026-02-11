@@ -29,12 +29,26 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', function () {
         $productos = \App\Models\Producto::where('activo', true)->get();
         $totalProductos = $productos->count();
-        $stockTotal = $productos->sum('stock_total');
-        $productosNecesitanFabricacion = $productos->where('recomendacion_fabricacion', '>', 0)->count();
-        $unidadesAFabricar = $productos->sum('recomendacion_fabricacion');
+
+        // ✅ Calcular stock total correctamente
+        $stockTotal = $productos->sum(function ($producto) {
+            return $producto->stock_bodega + $producto->stock_enviado_full + ($producto->stock_full ?? 0);
+        });
+
+        // ✅ Calcular productos que necesitan fabricación
+        $productosNecesitanFabricacion = $productos->filter(function ($producto) {
+            return $producto->recomendacion_fabricacion > 0;
+        })->count();
+
+        // ✅ Calcular unidades a fabricar
+        $unidadesAFabricar = $productos->sum(function ($producto) {
+            return $producto->recomendacion_fabricacion;
+        });
 
         $productosPrioritarios = $productos
-            ->where('recomendacion_fabricacion', '>', 0)
+            ->filter(function ($producto) {
+                return $producto->recomendacion_fabricacion > 0;
+            })
             ->sortByDesc('recomendacion_fabricacion')
             ->take(10);
 
@@ -499,30 +513,30 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('debug.ml.all.items');
 
     // Ver progreso de sincronización
-Route::get('/sync-progress', function () {
-    $ultimaSync = \App\Models\Producto::where('activo', true)
-        ->whereNotNull('ml_ultimo_sync')
-        ->orderBy('ml_ultimo_sync', 'desc')
-        ->first();
-    
-    $totalProductos = \App\Models\Producto::where('activo', true)
-        ->whereNotNull('codigo_interno_ml')
-        ->where('codigo_interno_ml', '!=', '')
-        ->count();
-    
-    $sincronizados = \App\Models\Producto::where('activo', true)
-        ->whereNotNull('ml_ultimo_sync')
-        ->where('ml_ultimo_sync', '>=', now()->subMinutes(10))
-        ->count();
-    
-    return response()->json([
-        'total' => $totalProductos,
-        'sincronizados' => $sincronizados,
-        'porcentaje' => $totalProductos > 0 ? round(($sincronizados / $totalProductos) * 100, 1) : 0,
-        'ultima_sync' => $ultimaSync ? $ultimaSync->ml_ultimo_sync->diffForHumans() : 'nunca',
-        'completado' => $sincronizados >= $totalProductos,
-    ]);
-})->name('sync.progress');
+    Route::get('/sync-progress', function () {
+        $ultimaSync = \App\Models\Producto::where('activo', true)
+            ->whereNotNull('ml_ultimo_sync')
+            ->orderBy('ml_ultimo_sync', 'desc')
+            ->first();
+
+        $totalProductos = \App\Models\Producto::where('activo', true)
+            ->whereNotNull('codigo_interno_ml')
+            ->where('codigo_interno_ml', '!=', '')
+            ->count();
+
+        $sincronizados = \App\Models\Producto::where('activo', true)
+            ->whereNotNull('ml_ultimo_sync')
+            ->where('ml_ultimo_sync', '>=', now()->subMinutes(10))
+            ->count();
+
+        return response()->json([
+            'total' => $totalProductos,
+            'sincronizados' => $sincronizados,
+            'porcentaje' => $totalProductos > 0 ? round(($sincronizados / $totalProductos) * 100, 1) : 0,
+            'ultima_sync' => $ultimaSync ? $ultimaSync->ml_ultimo_sync->diffForHumans() : 'nunca',
+            'completado' => $sincronizados >= $totalProductos,
+        ]);
+    })->name('sync.progress');
 });
 
 
