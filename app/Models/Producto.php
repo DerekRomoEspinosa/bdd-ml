@@ -34,18 +34,26 @@ class Producto extends Model
         return $this->ventas_30_dias ? round($this->ventas_30_dias / 30, 2) : 0;
     }
 
-    // Stock mínimo: Si Carlos definió uno, usarlo. Si no, usar 2 × piezas_por_plancha
+    // Stock mínimo: Si Carlos lo definió, usarlo. Si no, calcular 2 × piezas_por_plancha
     public function getStockMinimoAttribute(): int
     {
-        return $this->stock_minimo_deseado > 0 
-            ? $this->stock_minimo_deseado 
-            : ($this->piezas_por_plancha * 2);
+        if ($this->stock_minimo_deseado > 0) {
+            return $this->stock_minimo_deseado;
+        }
+        
+        return $this->piezas_por_plancha * 2;
     }
 
-    // ✅ SÚPER SIMPLE: Solo restar lo que falta
+    // ✅ LÓGICA SÚPER SIMPLE: Stock mínimo - Stock actual
     public function getRecomendacionFabricacionAttribute()
     {
+        // Si no tiene piezas por plancha definidas, no fabricar
+        if ($this->piezas_por_plancha <= 0) {
+            return 0;
+        }
+        
         $faltante = $this->stock_minimo - $this->stock_total;
+        
         return max(0, $faltante);
     }
 

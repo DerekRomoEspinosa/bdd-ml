@@ -201,6 +201,7 @@
                             <span class="ml-4 text-sm font-medium text-gray-900">Nuevo Producto</span>
                         </a>
 
+                        {{-- Botón de sincronización --}}
                         <form action="{{ route('productos.sync-ml-directo') }}" method="POST" class="contents"
                             id="syncForm">
                             @csrf
@@ -214,62 +215,9 @@
                                         </path>
                                     </svg>
                                 </div>
-                                <span class="ml-4 text-sm font-medium text-gray-900 text-left">Sincronizar con
-                                    ML</span>
+                                <span class="ml-4 text-sm font-medium text-gray-900 text-left">Sincronizar con ML</span>
                             </button>
                         </form>
-
-                        {{-- Progress indicator --}}
-                        <div id="syncProgress" class="hidden mt-4 p-4 bg-blue-50 rounded-xl">
-                            <div class="flex items-center">
-                                <svg class="animate-spin h-5 w-5 text-blue-600 mr-3" fill="none"
-                                    viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10"
-                                        stroke="currentColor" stroke-width="4"></circle>
-                                    <path class="opacity-75" fill="currentColor"
-                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                                    </path>
-                                </svg>
-                                <div>
-                                    <p class="text-sm font-medium text-blue-900">Sincronizando...</p>
-                                    <p class="text-xs text-blue-700"><span id="syncCount">0</span> / <span
-                                            id="syncTotal">303</span> productos (<span id="syncPercent">0</span>%)</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <script>
-                            let syncInterval;
-
-                            document.getElementById('syncForm')?.addEventListener('submit', function(e) {
-                                // Mostrar progress
-                                document.getElementById('syncProgress').classList.remove('hidden');
-                                document.getElementById('syncButton').disabled = true;
-
-                                // Polling cada 3 segundos
-                                syncInterval = setInterval(checkSyncProgress, 3000);
-                            });
-
-                            async function checkSyncProgress() {
-                                try {
-                                    const response = await fetch('{{ route('sync.progress') }}');
-                                    const data = await response.json();
-
-                                    document.getElementById('syncCount').textContent = data.sincronizados;
-                                    document.getElementById('syncTotal').textContent = data.total;
-                                    document.getElementById('syncPercent').textContent = data.porcentaje;
-
-                                    if (data.completado) {
-                                        clearInterval(syncInterval);
-                                        setTimeout(() => {
-                                            window.location.reload();
-                                        }, 2000);
-                                    }
-                                } catch (error) {
-                                    console.error('Error checking sync progress:', error);
-                                }
-                            }
-                        </script>
 
                         <a href="{{ route('productos.index') }}"
                             class="flex items-center p-4 bg-gradient-to-r from-emerald-50 to-green-50 hover:from-emerald-100 hover:to-green-100 rounded-xl transition-all duration-300 group">
@@ -310,6 +258,27 @@
                             <span class="ml-4 text-sm font-medium text-gray-900">Mapear Códigos ML</span>
                         </a>
 
+                    </div>
+                </div>
+            </div>
+
+            {{-- ✅ Progress indicator MEJORADO --}}
+            <div id="syncProgress" class="hidden bg-blue-50 border-l-4 border-blue-400 p-6 rounded-r-lg">
+                <div class="flex items-center">
+                    <svg class="animate-spin h-6 w-6 text-blue-600 mr-4" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <div class="flex-1">
+                        <p class="text-sm font-bold text-blue-900 mb-1">Sincronizando productos con Mercado Libre...</p>
+                        <div class="flex items-center gap-4">
+                            <div class="flex-1 bg-blue-200 rounded-full h-3">
+                                <div id="syncProgressBar" class="bg-blue-600 h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                            <span class="text-sm font-medium text-blue-700 whitespace-nowrap">
+                                <span id="syncCount">0</span> / <span id="syncTotal">0</span> (<span id="syncPercent">0</span>%)
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -359,35 +328,23 @@
                             <table class="min-w-full divide-y divide-gray-200">
                                 <thead class="bg-gray-50">
                                     <tr>
-                                        <th
-                                            class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            SKU</th>
-                                        <th
-                                            class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Producto</th>
-                                        <th
-                                            class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Stock Actual</th>
-                                        <th
-                                            class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Fabricar</th>
-                                        <th
-                                            class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Prioridad</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock Actual</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fabricar</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridad</th>
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-200">
                                     @foreach ($productosPrioritarios as $producto)
                                         <tr class="hover:bg-gray-50 transition-colors">
                                             <td class="px-6 py-4 whitespace-nowrap">
-                                                {{-- ✅ SKU CLICKEABLE --}}
                                                 <a href="{{ route('productos.edit', $producto) }}"
                                                     class="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline">
                                                     {{ $producto->sku_ml }}
                                                 </a>
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap">
-                                                {{-- ✅ NOMBRE CLICKEABLE --}}
                                                 <a href="{{ route('productos.edit', $producto) }}"
                                                     class="text-sm text-gray-900 hover:text-blue-600 hover:underline">
                                                     {{ $producto->nombre }}
@@ -397,8 +354,7 @@
                                                 {{ number_format($producto->stock_total) }}
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap">
-                                                <span
-                                                    class="px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                                                <span class="px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full bg-red-100 text-red-800">
                                                     {{ number_format($producto->recomendacion_fabricacion) }}
                                                 </span>
                                             </td>
@@ -409,8 +365,7 @@
                                                             style="width: {{ min(($producto->recomendacion_fabricacion / ($unidadesAFabricar > 0 ? $unidadesAFabricar : 1)) * 100, 100) }}%">
                                                         </div>
                                                     </div>
-                                                    <span
-                                                        class="text-sm text-gray-500">{{ round(($producto->recomendacion_fabricacion / ($unidadesAFabricar > 0 ? $unidadesAFabricar : 1)) * 100, 1) }}%</span>
+                                                    <span class="text-sm text-gray-500">{{ round(($producto->recomendacion_fabricacion / ($unidadesAFabricar > 0 ? $unidadesAFabricar : 1)) * 100, 1) }}%</span>
                                                 </div>
                                             </td>
                                         </tr>
@@ -419,14 +374,12 @@
                             </table>
                         </div>
 
-                        {{-- ✅ BOTÓN PARA VER TODOS --}}
                         <div class="mt-4 text-center">
                             <a href="{{ route('productos.index', ['filtro' => 'necesitan_fabricacion']) }}"
                                 class="inline-flex items-center px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition">
                                 Ver todos los productos a fabricar
                                 <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M9 5l7 7-7 7"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                                 </svg>
                             </a>
                         </div>
@@ -446,9 +399,7 @@
             data: {
                 labels: ['Stock OK', 'Necesitan Fabricación'],
                 datasets: [{
-                    data: [{{ $totalProductos - $productosNecesitanFabricacion }},
-                        {{ $productosNecesitanFabricacion }}
-                    ],
+                    data: [{{ $totalProductos - $productosNecesitanFabricacion }}, {{ $productosNecesitanFabricacion }}],
                     backgroundColor: ['rgb(34, 197, 94)', 'rgb(239, 68, 68)'],
                     borderWidth: 0
                 }]
@@ -464,12 +415,73 @@
             }
         });
     </script>
+
+    {{-- ✅ Script de sincronización MEJORADO --}}
     <script>
-        // Auto-refresh después de sincronización
-        @if (session('success') && str_contains(session('success'), 'Sincronizados:'))
-            setTimeout(function() {
-                window.location.reload();
-            }, 3000); // Recargar después de 3 segundos
-        @endif
+        let syncInterval;
+
+        document.getElementById('syncForm')?.addEventListener('submit', function(e) {
+            // Mostrar progress
+            const progressDiv = document.getElementById('syncProgress');
+            const syncButton = document.getElementById('syncButton');
+            
+            if (progressDiv) {
+                progressDiv.classList.remove('hidden');
+            }
+            
+            if (syncButton) {
+                syncButton.disabled = true;
+                syncButton.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+
+            // Polling cada 2 segundos
+            syncInterval = setInterval(checkSyncProgress, 2000);
+        });
+
+        async function checkSyncProgress() {
+            try {
+                const response = await fetch('{{ route('sync.progress') }}');
+                const data = await response.json();
+
+                document.getElementById('syncCount').textContent = data.sincronizados;
+                document.getElementById('syncTotal').textContent = data.total;
+                document.getElementById('syncPercent').textContent = data.porcentaje;
+                
+                // Actualizar barra de progreso
+                const progressBar = document.getElementById('syncProgressBar');
+                if (progressBar) {
+                    progressBar.style.width = data.porcentaje + '%';
+                }
+
+                if (data.completado) {
+                    clearInterval(syncInterval);
+                    
+                    // Mostrar mensaje de éxito
+                    const progressDiv = document.getElementById('syncProgress');
+                    if (progressDiv) {
+                        progressDiv.innerHTML = `
+                            <div class="flex items-center">
+                                <svg class="h-6 w-6 text-green-600 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <div>
+                                    <p class="text-sm font-bold text-green-900">✅ Sincronización completada</p>
+                                    <p class="text-xs text-green-700">La página se recargará en 2 segundos...</p>
+                                </div>
+                            </div>
+                        `;
+                        progressDiv.classList.remove('bg-blue-50', 'border-blue-400');
+                        progressDiv.classList.add('bg-green-50', 'border-green-400');
+                    }
+                    
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                }
+            } catch (error) {
+                console.error('Error checking sync progress:', error);
+                clearInterval(syncInterval);
+            }
+        }
     </script>
 </x-app-layout>

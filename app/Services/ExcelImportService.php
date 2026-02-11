@@ -54,12 +54,12 @@ class ExcelImportService
                     $nombre = $modelo ?: 'Producto sin nombre';
                 }
 
-                // ✅ NUEVO: Agregar "MLM" automáticamente si falta
+                // ✅ Agregar "MLM" automáticamente si falta
                 if (!empty($codigoInternoMl) && !str_starts_with(strtoupper($codigoInternoMl), 'MLM')) {
                     $codigoInternoMl = 'MLM' . $codigoInternoMl;
                 }
 
-                // ✅ NUEVO: Calcular stock mínimo automáticamente (2 × piezas por plancha)
+                // ✅ Calcular stock mínimo automáticamente (2 × piezas por plancha)
                 $piezasPorPlancha = $piezasPorPlancha > 0 ? $piezasPorPlancha : 4; // Default 4
                 $stockMinimoDeseado = $piezasPorPlancha * 2;
 
@@ -80,7 +80,7 @@ class ExcelImportService
                     'stock_cortado' => $stockCortado,
                     'stock_enviado_full' => $stockEnviadoFull,
                     'piezas_por_plancha' => $piezasPorPlancha,
-                    'stock_minimo_deseado' => $stockMinimoDeseado, // ✅ Auto-calculado
+                    'stock_minimo_deseado' => $stockMinimoDeseado,
                     'activo' => true,
                 ];
 
