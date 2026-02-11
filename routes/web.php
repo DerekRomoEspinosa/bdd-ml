@@ -497,6 +497,34 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ], 500, [], JSON_PRETTY_PRINT);
         }
     })->name('debug.ml.all.items');
+
+    // Ver progreso de sincronización
+Route::get('/sync-progress', function () {
+    $ultimaSync = \App\Models\Producto::where('activo', true)
+        ->whereNotNull('ml_ultimo_sync')
+        ->orderBy('ml_ultimo_sync', 'desc')
+        ->first();
+    
+    $totalProductos = \App\Models\Producto::where('activo', true)
+        ->whereNotNull('codigo_interno_ml')
+        ->where('codigo_interno_ml', '!=', '')
+        ->count();
+    
+    $sincronizados = \App\Models\Producto::where('activo', true)
+        ->whereNotNull('ml_ultimo_sync')
+        ->where('ml_ultimo_sync', '>=', now()->subMinutes(10))
+        ->count();
+    
+    return response()->json([
+        'total' => $totalProductos,
+        'sincronizados' => $sincronizados,
+        'porcentaje' => $totalProductos > 0 ? round(($sincronizados / $totalProductos) * 100, 1) : 0,
+        'ultima_sync' => $ultimaSync ? $ultimaSync->ml_ultimo_sync->diffForHumans() : 'nunca',
+        'completado' => $sincronizados >= $totalProductos,
+    ]);
+})->name('sync.progress');
 });
+
+
 
 require __DIR__ . '/auth.php';

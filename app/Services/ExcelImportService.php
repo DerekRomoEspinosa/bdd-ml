@@ -31,8 +31,7 @@ class ExcelImportService
                 $modelo = $this->getCellValue($worksheet, 'A', $row); // Modelo
                 $nombre = $this->getCellValue($worksheet, 'C', $row); // Nombre Genérico
                 $plantillaCorteUrl = $this->getCellValue($worksheet, 'U', $row); // Plantilla de corte (columna U)
-                $piezasPorPlancha = (int) $this->getCellValue($worksheet, 'V', $row); // ✅ NUEVO: Piezas por plancha (columna V)
-                $stockMinimoDeseado = (int) $this->getCellValue($worksheet, 'W', $row); // ✅ NUEVO: Stock mínimo (columna W)
+                $piezasPorPlancha = (int) $this->getCellValue($worksheet, 'V', $row); // Piezas por plancha (columna V)
                 $skuMl = $this->getCellValue($worksheet, 'AS', $row); // SKU ML (columna AS)
                 $codigoInternoMl = $this->getCellValue($worksheet, 'AY', $row); // Código interno ML (columna AY)
                 
@@ -55,6 +54,15 @@ class ExcelImportService
                     $nombre = $modelo ?: 'Producto sin nombre';
                 }
 
+                // ✅ NUEVO: Agregar "MLM" automáticamente si falta
+                if (!empty($codigoInternoMl) && !str_starts_with(strtoupper($codigoInternoMl), 'MLM')) {
+                    $codigoInternoMl = 'MLM' . $codigoInternoMl;
+                }
+
+                // ✅ NUEVO: Calcular stock mínimo automáticamente (2 × piezas por plancha)
+                $piezasPorPlancha = $piezasPorPlancha > 0 ? $piezasPorPlancha : 4; // Default 4
+                $stockMinimoDeseado = $piezasPorPlancha * 2;
+
                 // Buscar si el producto ya existe (por SKU o por modelo o por código interno ML)
                 $producto = Producto::where('sku_ml', $skuMl)
                     ->orWhere('modelo', $modelo)
@@ -71,8 +79,8 @@ class ExcelImportService
                     'stock_bodega' => $stockBodega,
                     'stock_cortado' => $stockCortado,
                     'stock_enviado_full' => $stockEnviadoFull,
-                    'piezas_por_plancha' => $piezasPorPlancha > 0 ? $piezasPorPlancha : 4, // ✅ Default 4
-                    'stock_minimo_deseado' => $stockMinimoDeseado, // ✅ NUEVO
+                    'piezas_por_plancha' => $piezasPorPlancha,
+                    'stock_minimo_deseado' => $stockMinimoDeseado, // ✅ Auto-calculado
                     'activo' => true,
                 ];
 
@@ -94,6 +102,7 @@ class ExcelImportService
                     Log::info("✓ Producto actualizado", [
                         'id' => $producto->id,
                         'modelo' => $modelo,
+                        'piezas_por_plancha' => $piezasPorPlancha,
                         'stock_minimo' => $stockMinimoDeseado,
                         'codigo_interno_ml' => $codigoInternoMl ?? 'sin código',
                     ]);
@@ -105,6 +114,7 @@ class ExcelImportService
                     Log::info("✓ Producto creado", [
                         'id' => $nuevoProducto->id,
                         'modelo' => $modelo,
+                        'piezas_por_plancha' => $piezasPorPlancha,
                         'stock_minimo' => $stockMinimoDeseado,
                         'codigo_interno_ml' => $codigoInternoMl ?? 'sin código',
                     ]);
