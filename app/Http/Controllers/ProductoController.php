@@ -25,7 +25,8 @@ class ProductoController extends Controller
 
         // 🛠 Lógica centralizada de Stock Real para cálculos
         $stockReal = "(stock_bodega + stock_enviado_full + COALESCE(stock_full, 0))";
-        $promedioVenta = "(ventas_30_dias / 30)";
+        // ✅ CAMBIADO: usar ventas_30_dias_calculadas en lugar de ventas_30_dias
+        $promedioVenta = "(COALESCE(ventas_30_dias_calculadas, 0) / 30)";
         
         // Búsqueda por texto
         if ($buscar) {
@@ -37,7 +38,7 @@ class ProductoController extends Controller
             });
         }
         
-        // Filtros por estado ajustados a la petición de Carlos
+        // Filtros por estado ajustados
         if ($filtro) {
             switch ($filtro) {
                 case 'criticos':
@@ -78,7 +79,7 @@ class ProductoController extends Controller
             ->paginate(50)
             ->appends($request->all());
         
-        // Contadores corregidos para los badges de la interfaz
+        // Contadores corregidos
         $contadores = [
             'todos' => Producto::where('activo', true)->count(),
             'criticos' => Producto::where('activo', true)
@@ -175,21 +176,22 @@ class ProductoController extends Controller
                     ->with('error', '❌ El producto no tiene código interno de Mercado Libre.');
             }
             
-            $datos = $this->mlService->sincronizarProducto($identificador);
+            $datos = $mlService->sincronizarProducto($identificador);
             
             if ($datos['status'] === 'error') {
                 return redirect()->route('productos.edit', $producto)
                     ->with('error', '❌ Error al sincronizar con la API de ML.');
             }
 
+            // ✅ CAMBIADO: guardar en ventas_totales
             $producto->update([
                 'stock_full' => $datos['stock_full'],
-                'ventas_30_dias' => $datos['ventas_30_dias'],
+                'ventas_totales' => $datos['ventas_totales'], // ← CAMBIADO
                 'ml_ultimo_sync' => $datos['sincronizado_en'],
             ]);
 
             return redirect()->route('productos.edit', $producto)
-                ->with('success', "✅ Sincronizado | Stock Full: {$datos['stock_full']} | Ventas: {$datos['ventas_30_dias']}");
+                ->with('success', "✅ Sincronizado | Stock Full: {$datos['stock_full']} | Ventas Totales: {$datos['ventas_totales']}");
 
         } catch (\Exception $e) {
             Log::error("[Producto Sync] Error: " . $e->getMessage());
@@ -205,7 +207,6 @@ class ProductoController extends Controller
             $sincronizados = 0;
             $errores = 0;
             $sinCodigo = 0;
-            $totalProductos = Producto::where('activo', true)->count();
 
             Producto::where('activo', true)->chunk(50, function($productos) use (&$sincronizados, &$errores, &$sinCodigo) {
                 foreach ($productos as $producto) {
@@ -215,13 +216,13 @@ class ProductoController extends Controller
                             continue;
                         }
                         
-                        // Reutilizamos el servicio inyectado
                         $datos = $this->mlService->sincronizarProducto($producto->codigo_interno_ml);
                         
                         if ($datos['status'] !== 'error') {
+                            // ✅ CAMBIADO: guardar en ventas_totales
                             $producto->update([
                                 'stock_full' => $datos['stock_full'],
-                                'ventas_30_dias' => $datos['ventas_30_dias'],
+                                'ventas_totales' => $datos['ventas_totales'], // ← CAMBIADO
                                 'ml_ultimo_sync' => $datos['sincronizado_en'],
                             ]);
                             $sincronizados++;
@@ -229,7 +230,7 @@ class ProductoController extends Controller
                             $errores++;
                         }
                         
-                        usleep(250000); // 250ms para estabilidad
+                        usleep(250000);
                         
                     } catch (\Exception $e) {
                         $errores++;
