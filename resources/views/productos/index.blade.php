@@ -304,18 +304,20 @@
                                                         @endif
                                                         <div class="flex justify-center items-center gap-1">
                                                             <span class="text-gray-500">Full:</span>
-                                                            <span
-                                                                class="font-semibold text-gray-900">{{ $producto->stock_full ?? '-' }}</span>
+                                                            <span class="font-semibold text-gray-900">
+                                                                {{ $producto->stock_full > 0 ? $producto->stock_full : '-' }}
+                                                            </span>
                                                         </div>
                                                         <div class="flex justify-center items-center gap-1">
-                                                            <span class="text-gray-500">Ventas 30d:</span>
-                                                            <span
-                                                                class="font-semibold text-gray-900">{{ $producto->ventas_30_dias ?? '-' }}</span>
+                                                            <span class="text-gray-500">Ventas Totales ML:</span>
+                                                            <span class="font-semibold text-gray-900">
+                                                                {{ $producto->ventas_30_dias > 0 ? $producto->ventas_30_dias : '-' }}
+                                                            </span>
                                                         </div>
                                                     </div>
                                                     @if ($producto->ml_ultimo_sync)
                                                         <div class="text-xs text-gray-400 mt-2">
-                                                            {{ $producto->ml_ultimo_sync->diffForHumans() }}
+                                                            Sync: {{ $producto->ml_ultimo_sync->diffForHumans() }}
                                                         </div>
                                                     @endif
                                                 </td>

@@ -512,56 +512,52 @@ Route::middleware(['auth', 'verified'])->group(function () {
         }
     })->name('debug.ml.all.items');
 
-    // Ver progreso de sincronización
-    Route::get('/sync-progress', function () {
-        $ultimaSync = \App\Models\Producto::where('activo', true)
-            ->whereNotNull('ml_ultimo_sync')
-            ->orderBy('ml_ultimo_sync', 'desc')
-            ->first();
-
+    // ============================================
+// PROGRESO DE SINCRONIZACIÓN
+// ============================================
+Route::get('/sync-progress', function () {
+    try {
+        // Total de productos con código ML (activos)
         $totalProductos = \App\Models\Producto::where('activo', true)
             ->whereNotNull('codigo_interno_ml')
             ->where('codigo_interno_ml', '!=', '')
             ->count();
 
+        // Productos sincronizados en los últimos 5 minutos
         $sincronizados = \App\Models\Producto::where('activo', true)
             ->whereNotNull('ml_ultimo_sync')
-            ->where('ml_ultimo_sync', '>=', now()->subMinutes(10))
+            ->where('ml_ultimo_sync', '>=', now()->subMinutes(5))
             ->count();
+
+        $porcentaje = $totalProductos > 0 ? round(($sincronizados / $totalProductos) * 100, 1) : 0;
+        $completado = $sincronizados >= $totalProductos && $totalProductos > 0;
+
+        // Última sincronización
+        $ultimaSync = \App\Models\Producto::where('activo', true)
+            ->whereNotNull('ml_ultimo_sync')
+            ->orderBy('ml_ultimo_sync', 'desc')
+            ->first();
 
         return response()->json([
             'total' => $totalProductos,
             'sincronizados' => $sincronizados,
-            'porcentaje' => $totalProductos > 0 ? round(($sincronizados / $totalProductos) * 100, 1) : 0,
-            'ultima_sync' => $ultimaSync ? $ultimaSync->ml_ultimo_sync->diffForHumans() : 'nunca',
-            'completado' => $sincronizados >= $totalProductos,
+            'porcentaje' => $porcentaje,
+            'ultima_sync' => $ultimaSync ? $ultimaSync->ml_ultimo_sync->format('H:i:s') : 'nunca',
+            'completado' => $completado,
         ]);
-    })->name('sync.progress');
-    // Ver progreso de sincronización
-Route::get('/sync-progress', function () {
-    $ultimaSync = \App\Models\Producto::where('activo', true)
-        ->whereNotNull('ml_ultimo_sync')
-        ->orderBy('ml_ultimo_sync', 'desc')
-        ->first();
-
-    $totalProductos = \App\Models\Producto::where('activo', true)
-        ->whereNotNull('codigo_interno_ml')
-        ->where('codigo_interno_ml', '!=', '')
-        ->count();
-
-    $sincronizados = \App\Models\Producto::where('activo', true)
-        ->whereNotNull('ml_ultimo_sync')
-        ->where('ml_ultimo_sync', '>=', now()->subMinutes(10))
-        ->count();
-
-    return response()->json([
-        'total' => $totalProductos,
-        'sincronizados' => $sincronizados,
-        'porcentaje' => $totalProductos > 0 ? round(($sincronizados / $totalProductos) * 100, 1) : 0,
-        'ultima_sync' => $ultimaSync ? $ultimaSync->ml_ultimo_sync->diffForHumans() : 'nunca',
-        'completado' => $sincronizados >= $totalProductos,
-    ]);
+    } catch (\Exception $e) {
+        \Log::error('[Sync Progress] Error: ' . $e->getMessage());
+        return response()->json([
+            'total' => 0,
+            'sincronizados' => 0,
+            'porcentaje' => 0,
+            'ultima_sync' => 'error',
+            'completado' => false,
+            'error' => $e->getMessage()
+        ]);
+    }
 })->name('sync.progress');
+    
 });
 
 

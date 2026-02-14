@@ -20,6 +20,8 @@ class Producto extends Model
         'ml_published_at' => 'datetime',
         'piezas_por_plancha' => 'integer',
         'stock_minimo_deseado' => 'integer',
+        'stock_full' => 'integer',
+        'ventas_30_dias' => 'integer',
     ];
 
     // ✅ Stock Total = Bodega + Enviado Full + Full
@@ -37,23 +39,34 @@ class Producto extends Model
     // Stock mínimo: Si Carlos lo definió, usarlo. Si no, calcular 2 × piezas_por_plancha
     public function getStockMinimoAttribute(): int
     {
+        // Si tiene stock mínimo deseado definido, usarlo
         if ($this->stock_minimo_deseado > 0) {
             return $this->stock_minimo_deseado;
         }
         
-        return $this->piezas_por_plancha * 2;
-    }
-
-    // ✅ LÓGICA SÚPER SIMPLE: Stock mínimo - Stock actual
-    public function getRecomendacionFabricacionAttribute()
-    {
-        // Si no tiene piezas por plancha definidas, no fabricar
-        if ($this->piezas_por_plancha <= 0) {
+        // Si no tiene piezas por plancha, retornar 0 (no fabricar)
+        if (!$this->piezas_por_plancha || $this->piezas_por_plancha <= 0) {
             return 0;
         }
         
-        $faltante = $this->stock_minimo - $this->stock_total;
+        // Calcular: 2 × piezas por plancha
+        return $this->piezas_por_plancha * 2;
+    }
+
+    // ✅ LÓGICA SÚPER CONSERVADORA: Solo fabricar si está por debajo del mínimo
+    public function getRecomendacionFabricacionAttribute()
+    {
+        // Si no tiene stock mínimo definido, no fabricar
+        $stockMinimo = $this->stock_minimo;
         
+        if ($stockMinimo <= 0) {
+            return 0;
+        }
+        
+        // Calcular faltante
+        $faltante = $stockMinimo - $this->stock_total;
+        
+        // Solo retornar si realmente falta (no números negativos)
         return max(0, $faltante);
     }
 

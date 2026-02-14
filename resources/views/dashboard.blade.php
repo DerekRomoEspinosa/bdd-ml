@@ -417,71 +417,126 @@
     </script>
 
     {{-- ✅ Script de sincronización MEJORADO --}}
-    <script>
-        let syncInterval;
+<script>
+    let syncInterval;
+    let syncStartTime;
 
-        document.getElementById('syncForm')?.addEventListener('submit', function(e) {
-            // Mostrar progress
-            const progressDiv = document.getElementById('syncProgress');
-            const syncButton = document.getElementById('syncButton');
+    document.getElementById('syncForm')?.addEventListener('submit', function(e) {
+        syncStartTime = Date.now();
+        
+        // Mostrar progress inmediatamente
+        const progressDiv = document.getElementById('syncProgress');
+        const syncButton = document.getElementById('syncButton');
+        
+        if (progressDiv) {
+            progressDiv.classList.remove('hidden');
+        }
+        
+        if (syncButton) {
+            syncButton.disabled = true;
+            syncButton.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+
+        // Iniciar polling INMEDIATAMENTE y luego cada 2 segundos
+        checkSyncProgress();
+        syncInterval = setInterval(checkSyncProgress, 2000);
+    });
+
+    async function checkSyncProgress() {
+        try {
+            const response = await fetch('{{ route('sync.progress') }}');
+            const data = await response.json();
+
+            console.log('Sync progress:', data); // Debug
+
+            // Actualizar contadores
+            document.getElementById('syncCount').textContent = data.sincronizados;
+            document.getElementById('syncTotal').textContent = data.total;
+            document.getElementById('syncPercent').textContent = data.porcentaje;
             
-            if (progressDiv) {
-                progressDiv.classList.remove('hidden');
-            }
-            
-            if (syncButton) {
-                syncButton.disabled = true;
-                syncButton.classList.add('opacity-50', 'cursor-not-allowed');
+            // Actualizar barra de progreso
+            const progressBar = document.getElementById('syncProgressBar');
+            if (progressBar) {
+                progressBar.style.width = data.porcentaje + '%';
             }
 
-            // Polling cada 2 segundos
-            syncInterval = setInterval(checkSyncProgress, 2000);
-        });
+            // Calcular tiempo transcurrido
+            const elapsedSeconds = Math.floor((Date.now() - syncStartTime) / 1000);
+            const minutes = Math.floor(elapsedSeconds / 60);
+            const seconds = elapsedSeconds % 60;
+            const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 
-        async function checkSyncProgress() {
-            try {
-                const response = await fetch('{{ route('sync.progress') }}');
-                const data = await response.json();
-
-                document.getElementById('syncCount').textContent = data.sincronizados;
-                document.getElementById('syncTotal').textContent = data.total;
-                document.getElementById('syncPercent').textContent = data.porcentaje;
-                
-                // Actualizar barra de progreso
-                const progressBar = document.getElementById('syncProgressBar');
-                if (progressBar) {
-                    progressBar.style.width = data.porcentaje + '%';
-                }
-
-                if (data.completado) {
-                    clearInterval(syncInterval);
-                    
-                    // Mostrar mensaje de éxito
-                    const progressDiv = document.getElementById('syncProgress');
-                    if (progressDiv) {
-                        progressDiv.innerHTML = `
-                            <div class="flex items-center">
-                                <svg class="h-6 w-6 text-green-600 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                </svg>
-                                <div>
-                                    <p class="text-sm font-bold text-green-900">✅ Sincronización completada</p>
-                                    <p class="text-xs text-green-700">La página se recargará en 2 segundos...</p>
-                                </div>
-                            </div>
-                        `;
-                        progressDiv.classList.remove('bg-blue-50', 'border-blue-400');
-                        progressDiv.classList.add('bg-green-50', 'border-green-400');
-                    }
-                    
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 2000);
-                }
-            } catch (error) {
-                console.error('Error checking sync progress:', error);
+            // Si completó o hay error
+            if (data.completado || (data.total > 0 && data.sincronizados >= data.total)) {
                 clearInterval(syncInterval);
+                
+                // Mostrar mensaje de éxito
+                const progressDiv = document.getElementById('syncProgress');
+                if (progressDiv) {
+                    progressDiv.innerHTML = `
+                        <div class="flex items-center">
+                            <svg class="h-6 w-6 text-green-600 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <div>
+                                <p class="text-sm font-bold text-green-900">✅ Sincronización completada</p>
+                                <p class="text-xs text-green-700">${data.sincronizados} productos sincronizados en ${timeStr}. Recargando...</p>
+                            </div>
+                        </div>
+                    `;
+                    progressDiv.classList.remove('bg-blue-50', 'border-blue-400');
+                    progressDiv.classList.add('bg-green-50', 'border-green-400');
+                }
+                
+                setTimeout(() => {
+                    window.location.reload();
+                }, 3000);
+            } else if (data.total === 0) {
+                // No hay productos para sincronizar
+                clearInterval(syncInterval);
+                
+                const progressDiv = document.getElementById('syncProgress');
+                if (progressDiv) {
+                    progressDiv.innerHTML = `
+                        <div class="flex items-center">
+                            <svg class="h-6 w-6 text-yellow-600 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                            </svg>
+                            <div>
+                                <p class="text-sm font-bold text-yellow-900">⚠️ No hay productos para sincronizar</p>
+                                <p class="text-xs text-yellow-700">Asegúrate de haber importado productos con códigos ML</p>
+                            </div>
+                        </div>
+                    `;
+                    progressDiv.classList.remove('bg-blue-50', 'border-blue-400');
+                    progressDiv.classList.add('bg-yellow-50', 'border-yellow-400');
+                }
+                
+                setTimeout(() => {
+                    window.location.reload();
+                }, 3000);
+            }
+        } catch (error) {
+            console.error('Error checking sync progress:', error);
+            clearInterval(syncInterval);
+            
+            const progressDiv = document.getElementById('syncProgress');
+            if (progressDiv) {
+                progressDiv.innerHTML = `
+                    <div class="flex items-center">
+                        <svg class="h-6 w-6 text-red-600 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        <div>
+                            <p class="text-sm font-bold text-red-900">❌ Error en la sincronización</p>
+                            <p class="text-xs text-red-700">Revisa los logs o intenta nuevamente</p>
+                        </div>
+                    </div>
+                `;
+                progressDiv.classList.remove('bg-blue-50', 'border-blue-400');
+                progressDiv.classList.add('bg-red-50', 'border-red-400');
             }
         }
-    </script>
+    }
+</script>
 </x-app-layout>
