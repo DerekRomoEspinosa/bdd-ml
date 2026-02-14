@@ -11,9 +11,6 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
-/**
- * Job de Lote SIMPLIFICADO - Sin Cache
- */
 class SincronizarLoteMLJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
@@ -46,7 +43,6 @@ class SincronizarLoteMLJob implements ShouldQueue
         $sincronizados = 0;
         $errores = 0;
 
-        // Cargar productos del lote
         $productos = Producto::whereIn('id', $this->productosIds)
             ->where('activo', true)
             ->get();
@@ -58,15 +54,17 @@ class SincronizarLoteMLJob implements ShouldQueue
 
         foreach ($productos as $index => $producto) {
             try {
-               $numero = $index + 1;
-                     $total = $productos->count();
-                    Log::debug("  → Sincronizando {$producto->sku_ml} ({$numero}/{$total})");
+                $numero = $index + 1;
+                $total = $productos->count();
+                Log::debug("  → Sincronizando {$producto->sku_ml} ({$numero}/{$total})");
 
                 $datos = $mlService->sincronizarProducto($producto->sku_ml);
 
+                // ✅ GUARDAR VENTAS TOTALES (no ventas_30_dias)
                 $producto->update([
                     'stock_full' => $datos['stock_full'],
-                    'ventas_30_dias' => $datos['ventas_30_dias'],
+                    'ventas_totales' => $datos['ventas_totales'], // ← CAMBIADO
+                    'ml_published_at' => $datos['ml_published_at'] ?? null,
                     'ml_ultimo_sync' => $datos['sincronizado_en'],
                 ]);
                 
@@ -74,10 +72,9 @@ class SincronizarLoteMLJob implements ShouldQueue
 
             } catch (\Exception $e) {
                 $errores++;
-                Log::error("  ✗ Error en {$producto->sku_ml}: {$e->getMessage()}");
+                Log::error("  ✗ Error en {$producto->sku_ml}: " . $e->getMessage());
             }
 
-            // Pausa entre productos (250ms)
             usleep(250000);
         }
 
@@ -89,10 +86,8 @@ class SincronizarLoteMLJob implements ShouldQueue
             'fallidos' => $errores,
             'total' => $productos->count(),
             'tiempo_segundos' => $tiempoTotal,
-            'tasa_exito' => round(($sincronizados / $productos->count()) * 100, 2) . '%'
         ]);
 
-        // Liberar memoria
         unset($productos);
         gc_collect_cycles();
     }

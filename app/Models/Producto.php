@@ -3,82 +3,138 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Producto extends Model
 {
     protected $fillable = [
-        'nombre', 'modelo', 'sku_ml', 'codigo_interno_ml',        
-        'plantilla_corte_url', 'piezas_por_plancha', 'stock_minimo_deseado', 'variante_bafle',
-        'stock_bodega', 'stock_cortado', 'stock_costura', 
-        'stock_por_empacar', 'stock_enviado_full',
-        'stock_full', 'ventas_30_dias', 'ml_published_at', 'ml_ultimo_sync', 'activo',
+        // ... tus campos existentes ...
+        'nombre',
+        'sku_ml',
+        'codigo_interno_ml',
+        'stock_bodega',
+        'stock_cortado',
+        'stock_costura',
+        'stock_por_empacar',
+        'stock_enviado_full',
+        'stock_full',
+        'ventas_totales', // ← RENOMBRADO (era ventas_30_dias)
+        'ventas_totales_reporte_anterior', // ← NUEVO
+        'ventas_30_dias_calculadas', // ← NUEVO
+        'fecha_ultimo_reporte', // ← NUEVO
+        'usa_variante_para_fabricacion', // ← NUEVO
+        'ml_ultimo_sync',
+        'ml_published_at',
+        'activo',
+        'recomendacion_fabricacion',
     ];
 
     protected $casts = [
         'activo' => 'boolean',
+        'usa_variante_para_fabricacion' => 'boolean',
         'ml_ultimo_sync' => 'datetime',
         'ml_published_at' => 'datetime',
-        'piezas_por_plancha' => 'integer',
-        'stock_minimo_deseado' => 'integer',
-        'stock_full' => 'integer',
-        'ventas_30_dias' => 'integer',
+        'fecha_ultimo_reporte' => 'datetime',
     ];
 
-    // ✅ Stock Total = Bodega + Enviado Full + Full
-    public function getStockTotalAttribute()
+    /**
+     * Variantes compatibles con este producto (funda de bafle)
+     */
+    public function variantes(): BelongsToMany
     {
-        return $this->stock_bodega + $this->stock_enviado_full + ($this->stock_full ?? 0);
+        return $this->belongsToMany(Variante::class, 'producto_variante')
+            ->withTimestamps();
     }
 
-    // Consumo Diario (Ventas / 30)
-    public function getConsumoDiarioAttribute(): float
+    /**
+     * Calcular ventas de últimos 30 días
+     * (Ventas actuales - Ventas reporte anterior)
+     */
+    public function calcularVentas30Dias(): void
     {
-        return $this->ventas_30_dias ? round($this->ventas_30_dias / 30, 2) : 0;
+        $ventasActuales = $this->ventas_totales ?? 0;
+        $ventasAntes = $this->ventas_totales_reporte_anterior ?? 0;
+        
+        $this->ventas_30_dias_calculadas = max(0, $ventasActuales - $ventasAntes);
+        $this->save();
     }
 
-    // Stock mínimo: Si Carlos lo definió, usarlo. Si no, calcular 2 × piezas_por_plancha
-    public function getStockMinimoAttribute(): int
+    /**
+     * Actualizar desde un nuevo reporte
+     */
+    public function actualizarDesdeReporte(int $nuevasVentasTotales): void
     {
-        // Si tiene stock mínimo deseado definido, usarlo
-        if ($this->stock_minimo_deseado > 0) {
-            return $this->stock_minimo_deseado;
-        }
+        // Guardar ventas actuales como reporte anterior
+        $this->ventas_totales_reporte_anterior = $this->ventas_totales ?? 0;
         
-        // Si no tiene piezas por plancha, retornar 0 (no fabricar)
-        if (!$this->piezas_por_plancha || $this->piezas_por_plancha <= 0) {
-            return 0;
-        }
+        // Actualizar ventas totales
+        $this->ventas_totales = $nuevasVentasTotales;
         
-        // Calcular: 2 × piezas por plancha
-        return $this->piezas_por_plancha * 2;
+        // Calcular diferencia (ventas últimos 30 días)
+        $this->calcularVentas30Dias();
+        
+        // Marcar fecha del reporte
+        $this->fecha_ultimo_reporte = now();
+        
+        $this->save();
+        
+        // Si tiene variantes, actualizar contadores de variantes
+        if ($this->usa_variante_para_fabricacion) {
+            foreach ($this->variantes as $variante) {
+                $variante->actualizarContadores();
+            }
+        }
     }
 
-    // ✅ LÓGICA SÚPER CONSERVADORA: Solo fabricar si está por debajo del mínimo
-    public function getRecomendacionFabricacionAttribute()
+    /**
+     * Calcular stock total del producto
+     */
+    public function getStockTotalAttribute(): int
     {
-        // Si no tiene stock mínimo definido, no fabricar
-        $stockMinimo = $this->stock_minimo;
-        
-        if ($stockMinimo <= 0) {
-            return 0;
-        }
-        
-        // Calcular faltante
-        $faltante = $stockMinimo - $this->stock_total;
-        
-        // Solo retornar si realmente falta (no números negativos)
-        return max(0, $faltante);
+        return ($this->stock_bodega ?? 0)
+            + ($this->stock_cortado ?? 0)
+            + ($this->stock_costura ?? 0)
+            + ($this->stock_por_empacar ?? 0)
+            + ($this->stock_enviado_full ?? 0);
     }
 
-    // Para productos con variantes (bafles)
-    public function getVentasVarianteAttribute()
+    /**
+     * Calcular recomendación de fabricación
+     * 
+     * Si usa variante: NO calcular (se calcula en la variante)
+     * Si NO usa variante: calcular basado en sus propias ventas
+     */
+    public function calcularRecomendacionFabricacion(): void
     {
-        if (!$this->variante_bafle) {
-            return $this->ventas_30_dias;
+        if ($this->usa_variante_para_fabricacion) {
+            // No calcular, lo hace la variante
+            $this->recomendacion_fabricacion = 0;
+            $this->save();
+            return;
         }
 
-        return self::where('variante_bafle', $this->variante_bafle)
-            ->where('activo', true)
-            ->sum('ventas_30_dias');
+        $stockDisponible = $this->stock_total;
+        $ventasProyectadas = ($this->ventas_30_dias_calculadas ?? 0) * 2; // 60 días
+        
+        $deficit = $ventasProyectadas - $stockDisponible;
+        
+        $this->recomendacion_fabricacion = max(0, $deficit);
+        $this->save();
+    }
+
+    /**
+     * Scope: Productos que NO usan variante
+     */
+    public function scopeSinVariante($query)
+    {
+        return $query->where('usa_variante_para_fabricacion', false);
+    }
+
+    /**
+     * Scope: Productos que SÍ usan variante
+     */
+    public function scopeConVariante($query)
+    {
+        return $query->where('usa_variante_para_fabricacion', true);
     }
 }
