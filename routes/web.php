@@ -404,10 +404,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             $datos = $mlService->sincronizarProducto($producto->codigo_interno_ml);
 
             $producto->update([
-                'stock_full' => $datos['stock_full'],
-                'ventas_30_dias' => $datos['ventas_30_dias'],
-                'ml_ultimo_sync' => $datos['sincronizado_en'],
-            ]);
+    'stock_full' => $datos['stock_full'] ?? 0,
+    'ventas_30_dias' => $datos['ventas_30_dias'] ?? 0,
+    'ml_published_at' => $datos['ml_published_at'] ?? null,
+    'ml_ultimo_sync' => $datos['sincronizado_en'],
+]);
 
             return response()->json([
                 'success' => true,
@@ -451,10 +452,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             $datos = $mlService->sincronizarProducto($producto->codigo_interno_ml);
 
             $producto->update([
-                'stock_full' => $datos['stock_full'],
-                'ventas_30_dias' => $datos['ventas_30_dias'],
-                'ml_ultimo_sync' => $datos['sincronizado_en'],
-            ]);
+    'stock_full' => $datos['stock_full'],
+    'ventas_30_dias' => $datos['ventas_30_dias'],
+    'ml_published_at' => $datos['ml_published_at'] ?? null,
+    'ml_ultimo_sync' => $datos['sincronizado_en'],
+]);
 
             return response()->json([
                 'success' => true,
