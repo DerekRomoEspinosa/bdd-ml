@@ -574,35 +574,149 @@
         }
     </script>
     <script>
+    let syncInterval;
+    let syncStartTime;
+
     document.getElementById('syncForm')?.addEventListener('submit', function(e) {
+        syncStartTime = Date.now();
+        
         const progressDiv = document.getElementById('syncProgress');
         const syncButton = document.getElementById('syncButton');
         
         if (progressDiv) {
             progressDiv.classList.remove('hidden');
-            progressDiv.innerHTML = `
-                <div class="flex items-center">
-                    <svg class="animate-spin h-6 w-6 text-blue-600 mr-4" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <div class="flex-1">
-                        <p class="text-sm font-bold text-blue-900 mb-1">⏳ Sincronizando productos con Mercado Libre...</p>
-                        <p class="text-xs text-blue-700">Esto puede tomar varios minutos. Por favor no cierres esta ventana.</p>
-                        <div class="mt-2 flex items-center gap-2">
-                            <div class="flex-1 bg-blue-200 rounded-full h-2 overflow-hidden">
-                                <div class="bg-blue-600 h-2 rounded-full animate-pulse" style="width: 100%"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
         }
         
         if (syncButton) {
             syncButton.disabled = true;
             syncButton.classList.add('opacity-50', 'cursor-not-allowed');
         }
+
+        // Iniciar polling cada 2 segundos
+        setTimeout(() => {
+            checkSyncProgressV2();
+            syncInterval = setInterval(checkSyncProgressV2, 2000);
+        }, 2000); // Esperar 2 segundos antes de empezar a polling
     });
+
+    async function checkSyncProgressV2() {
+        try {
+            const response = await fetch('{{ route('sync.progress.v2') }}');
+            const data = await response.json();
+
+            console.log('Sync progress V2:', data);
+
+            if (data.status === 'not_started' || data.status === 'not_found') {
+                return;
+            }
+
+            if (data.status === 'error') {
+                clearInterval(syncInterval);
+                showError('Error obteniendo progreso: ' + data.message);
+                return;
+            }
+
+            // Actualizar UI con progreso
+            updateProgressUI(data);
+
+            // Si completó
+            if (data.is_complete) {
+                clearInterval(syncInterval);
+                showCompletion(data);
+                
+                // Recargar después de 3 segundos
+                setTimeout(() => {
+                    window.location.reload();
+                }, 3000);
+            }
+
+        } catch (error) {
+            console.error('Error checking sync progress:', error);
+            clearInterval(syncInterval);
+            showError('Error en la sincronización');
+        }
+    }
+
+    function updateProgressUI(data) {
+        const progressDiv = document.getElementById('syncProgress');
+        if (!progressDiv) return;
+
+        const elapsedSeconds = data.elapsed_time || 0;
+        const minutes = Math.floor(elapsedSeconds / 60);
+        const seconds = elapsedSeconds % 60;
+        const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+
+        progressDiv.innerHTML = `
+            <div class="flex items-center">
+                <svg class="animate-spin h-6 w-6 text-blue-600 mr-4" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <div class="flex-1">
+                    <p class="text-sm font-bold text-blue-900 mb-1">
+                        🔄 Sincronizando productos con Mercado Libre...
+                    </p>
+                    <div class="flex items-center gap-4">
+                        <div class="flex-1 bg-blue-200 rounded-full h-3 overflow-hidden">
+                            <div class="bg-blue-600 h-3 rounded-full transition-all duration-500" 
+                                 style="width: ${data.percentage}%"></div>
+                        </div>
+                        <span class="text-sm font-medium text-blue-700 whitespace-nowrap">
+                            ${data.processed} / ${data.total} (${data.percentage}%)
+                        </span>
+                    </div>
+                    <p class="text-xs text-blue-600 mt-2">
+                        ✅ ${data.successful} exitosos | ❌ ${data.failed} errores | ⏱️ ${timeStr}
+                    </p>
+                </div>
+            </div>
+        `;
+    }
+
+    function showCompletion(data) {
+        const progressDiv = document.getElementById('syncProgress');
+        if (!progressDiv) return;
+
+        const elapsedSeconds = data.elapsed_time || 0;
+        const minutes = Math.floor(elapsedSeconds / 60);
+        const seconds = elapsedSeconds % 60;
+        const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+
+        progressDiv.innerHTML = `
+            <div class="flex items-center">
+                <svg class="h-6 w-6 text-green-600 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <div>
+                    <p class="text-sm font-bold text-green-900">✅ Sincronización completada en ${timeStr}</p>
+                    <p class="text-xs text-green-700 mt-1">
+                        ${data.successful} productos sincronizados correctamente
+                        ${data.failed > 0 ? `| ${data.failed} errores` : ''}. Recargando...
+                    </p>
+                </div>
+            </div>
+        `;
+        progressDiv.classList.remove('bg-blue-50', 'border-blue-400');
+        progressDiv.classList.add('bg-green-50', 'border-green-400');
+    }
+
+    function showError(message) {
+        const progressDiv = document.getElementById('syncProgress');
+        if (!progressDiv) return;
+
+        progressDiv.innerHTML = `
+            <div class="flex items-center">
+                <svg class="h-6 w-6 text-red-600 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+                <div>
+                    <p class="text-sm font-bold text-red-900">❌ ${message}</p>
+                    <p class="text-xs text-red-700">Revisa los logs para más detalles</p>
+                </div>
+            </div>
+        `;
+        progressDiv.classList.remove('bg-blue-50', 'border-blue-400');
+        progressDiv.classList.add('bg-red-50', 'border-red-400');
+    }
 </script>
 </x-app-layout>

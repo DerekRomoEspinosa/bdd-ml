@@ -115,6 +115,59 @@ Route::middleware(['auth', 'verified'])->group(function () {
         }
     })->name('ml.refresh-token');
 
+    Route::get('/sync-progress-v2', function () {
+    try {
+        // Obtener session ID de la sesión
+        $sessionId = session('ml_sync_session_id');
+        
+        if (!$sessionId) {
+            return response()->json([
+                'status' => 'not_started',
+                'message' => 'No hay sincronización en progreso'
+            ]);
+        }
+
+        // Buscar progreso
+        $progress = \App\Models\SyncProgress::where('session_id', $sessionId)
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if (!$progress) {
+            return response()->json([
+                'status' => 'not_found',
+                'message' => 'No se encontró el progreso'
+            ]);
+        }
+
+        $response = [
+            'status' => $progress->is_complete ? 'completed' : 'in_progress',
+            'session_id' => $progress->session_id,
+            'total' => $progress->total,
+            'processed' => $progress->processed,
+            'successful' => $progress->successful,
+            'failed' => $progress->failed,
+            'percentage' => $progress->percentage,
+            'is_complete' => $progress->is_complete,
+            'elapsed_time' => $progress->elapsed_time,
+            'error_message' => $progress->error_message,
+        ];
+
+        // Si completó, limpiar session ID
+        if ($progress->is_complete) {
+            session()->forget('ml_sync_session_id');
+        }
+
+        return response()->json($response);
+
+    } catch (\Exception $e) {
+        \Log::error('[Sync Progress V2] Error: ' . $e->getMessage());
+        return response()->json([
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+})->name('sync.progress.v2');
+
     // Sincronización individual
     Route::post('productos/{producto}/sincronizar', [ProductoController::class, 'sincronizar'])
         ->name('productos.sincronizar');
@@ -125,24 +178,50 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Sincronización en background (con Jobs)
     Route::post('productos/sincronizar-ml-background', function () {
-        try {
-            $token = DB::table('mercadolibre_tokens')->find(1);
+    try {
+        $token = DB::table('mercadolibre_tokens')->find(1);
 
-            if (!$token) {
-                return redirect()->route('dashboard')
-                    ->with('error', '❌ No hay token de ML. Vincula tu cuenta primero.');
-            }
-
-            \App\Jobs\SincronizarProductosMLMaestro::dispatch();
-
+        if (!$token) {
             return redirect()->route('dashboard')
-                ->with('success', '🚀 Sincronización iniciada en segundo plano.');
-        } catch (\Exception $e) {
-            Log::error('[Sync Background] Error: ' . $e->getMessage());
-            return redirect()->route('dashboard')
-                ->with('error', '❌ Error: ' . $e->getMessage());
+                ->with('error', '❌ No hay token de ML. Vincula tu cuenta primero.');
         }
-    })->name('productos.sincronizar-ml-background');
+
+        // Verificar que hay productos para sincronizar
+        $totalProductos = \App\Models\Producto::where('activo', true)
+            ->whereNotNull('codigo_interno_ml')
+            ->where('codigo_interno_ml', '!=', '')
+            ->count();
+
+        if ($totalProductos === 0) {
+            return redirect()->route('dashboard')
+                ->with('warning', '⚠️ No hay productos con código interno ML para sincronizar.');
+        }
+
+        // Crear sesión única
+        $sessionId = 'ml_sync_' . now()->format('YmdHis_') . uniqid();
+
+        // Despachar job maestro
+        $job = new \App\Jobs\SincronizarProductosMLMaestro($sessionId);
+        dispatch($job);
+
+        Log::info('🚀 Sincronización iniciada', [
+            'session_id' => $sessionId,
+            'total_productos' => $totalProductos
+        ]);
+
+        // Guardar session ID en sesión para tracking
+        session(['ml_sync_session_id' => $sessionId]);
+
+        return redirect()->route('dashboard')
+            ->with('success', "🚀 Sincronización de {$totalProductos} productos iniciada.")
+            ->with('sync_session_id', $sessionId);
+
+    } catch (\Exception $e) {
+        Log::error('[Sync Background] Error: ' . $e->getMessage());
+        return redirect()->route('dashboard')
+            ->with('error', '❌ Error: ' . $e->getMessage());
+    }
+})->name('productos.sincronizar-ml-background');
 
     // ============================================
     // SINCRONIZACIÓN DIRECTA OPTIMIZADA

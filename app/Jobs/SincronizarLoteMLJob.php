@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Producto;
+use App\Models\SyncProgress;
 use App\Services\MercadoLibreService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -40,9 +41,6 @@ class SincronizarLoteMLJob implements ShouldQueue
             'intento' => $this->attempts()
         ]);
 
-        $sincronizados = 0;
-        $errores = 0;
-
         $productos = Producto::whereIn('id', $this->productosIds)
             ->where('activo', true)
             ->get();
@@ -52,38 +50,44 @@ class SincronizarLoteMLJob implements ShouldQueue
             return;
         }
 
+        // Obtener registro de progreso
+        $progress = SyncProgress::where('session_id', $this->sessionId)->first();
+
         foreach ($productos as $index => $producto) {
+            $success = false;
+            
             try {
                 $numero = $index + 1;
                 $total = $productos->count();
                 Log::debug("  → Sincronizando {$producto->sku_ml} ({$numero}/{$total})");
 
-                $datos = $mlService->sincronizarProducto($producto->sku_ml);
+                $datos = $mlService->sincronizarProducto($producto->codigo_interno_ml);
 
-                // ✅ GUARDAR VENTAS TOTALES (no ventas_30_dias)
                 $producto->update([
                     'stock_full' => $datos['stock_full'],
-                    'ventas_totales' => $datos['ventas_totales'], // ← CAMBIADO
+                    'ventas_totales' => $datos['ventas_totales'],
                     'ml_published_at' => $datos['ml_published_at'] ?? null,
                     'ml_ultimo_sync' => $datos['sincronizado_en'],
                 ]);
                 
-                $sincronizados++;
+                $success = true;
 
             } catch (\Exception $e) {
-                $errores++;
                 Log::error("  ✗ Error en {$producto->sku_ml}: " . $e->getMessage());
             }
 
-            usleep(250000);
+            // Actualizar progreso
+            if ($progress) {
+                $progress->incrementProcessed($success);
+            }
+
+            usleep(250000); // 250ms entre productos
         }
 
         $tiempoTotal = $inicioLote->diffInSeconds(now());
 
         Log::info("✅ Lote #{$this->numeroLote} COMPLETADO", [
             'session_id' => $this->sessionId,
-            'exitosos' => $sincronizados,
-            'fallidos' => $errores,
             'total' => $productos->count(),
             'tiempo_segundos' => $tiempoTotal,
         ]);
@@ -99,5 +103,19 @@ class SincronizarLoteMLJob implements ShouldQueue
             'productos_ids' => $this->productosIds,
             'error' => $exception->getMessage(),
         ]);
+
+        // Marcar productos como fallidos en el progreso
+        $progress = SyncProgress::where('session_id', $this->sessionId)->first();
+        if ($progress) {
+            $progress->increment('failed', count($this->productosIds));
+            $progress->increment('processed', count($this->productosIds));
+            
+            if ($progress->processed >= $progress->total) {
+                $progress->update([
+                    'is_complete' => true,
+                    'completed_at' => now(),
+                ]);
+            }
+        }
     }
 }
