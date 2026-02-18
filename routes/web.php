@@ -165,60 +165,60 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 ->with('warning', '⚠️ No hay productos con código interno ML.');
         }
 
-        if ($totalProductos <= 100) {
-            $inicio = now();
-            Log::info("🎯 [Sync Directo] Sincronización directa de {$totalProductos} productos");
+        // ✅ SIEMPRE sincronizar directo (sin jobs)
+        set_time_limit(1800); // 30 minutos max
+        
+        $inicio = now();
+        Log::info("🎯 [Sync Directo] Sincronización directa de {$totalProductos} productos");
 
-            $productos = \App\Models\Producto::where('activo', true)
-                ->whereNotNull('codigo_interno_ml')
-                ->where('codigo_interno_ml', '!=', '')
-                ->get();
+        $productos = \App\Models\Producto::where('activo', true)
+            ->whereNotNull('codigo_interno_ml')
+            ->where('codigo_interno_ml', '!=', '')
+            ->get();
 
-            $sincronizados = 0;
-            $pausados = 0;
-            $errores = 0;
+        $sincronizados = 0;
+        $pausados = 0;
+        $errores = 0;
+        $mlService = new \App\Services\MercadoLibreService();
 
-            foreach ($productos as $producto) {
-                try {
-                    $mlService = new \App\Services\MercadoLibreService();
-                    $datos = $mlService->sincronizarProducto($producto->codigo_interno_ml);
+        foreach ($productos as $producto) {
+            try {
+                $datos = $mlService->sincronizarProducto($producto->codigo_interno_ml);
 
-                    if (isset($datos['status']) && $datos['status'] === 'paused') {
-                        $pausados++;
-                    }
-
-                    // ✅ CAMBIADO: guardar ventas_totales
-                    $producto->update([
-                        'stock_full' => $datos['stock_full'],
-                        'ventas_totales' => $datos['ventas_totales'], // ← CAMBIADO
-                        'ml_published_at' => $datos['ml_published_at'] ?? null,
-                        'ml_ultimo_sync' => $datos['sincronizado_en'],
-                    ]);
-
-                    $sincronizados++;
-                    usleep(200000);
-
-                } catch (\Exception $e) {
-                    $errores++;
-                    Log::error("[Sync Directo] Error en producto {$producto->id}: " . $e->getMessage());
+                if (isset($datos['status']) && $datos['status'] === 'paused') {
+                    $pausados++;
                 }
+
+                $producto->update([
+                    'stock_full' => $datos['stock_full'],
+                    'ventas_totales' => $datos['ventas_totales'],
+                    'ml_published_at' => $datos['ml_published_at'] ?? null,
+                    'ml_ultimo_sync' => $datos['sincronizado_en'],
+                ]);
+
+                $sincronizados++;
+                
+                // Pausa de 250ms entre productos
+                usleep(250000);
+
+            } catch (\Exception $e) {
+                $errores++;
+                Log::error("[Sync Directo] Error en producto {$producto->id}: " . $e->getMessage());
             }
-
-            $tiempoTotal = $inicio->diffInSeconds(now());
-
-            $mensaje = "✅ Sincronizados: {$sincronizados} productos";
-            if ($pausados > 0) $mensaje .= " | ⏸️ Pausados: {$pausados}";
-            if ($errores > 0) $mensaje .= " | ⚠️ Errores: {$errores}";
-            $mensaje .= " | ⏱️ " . gmdate("i:s", $tiempoTotal);
-
-            return redirect()->route('dashboard')->with('success', $mensaje);
         }
 
-        Log::info("🎯 [Sync Background] Iniciando sincronización en cola de {$totalProductos} productos");
-        \App\Jobs\SincronizarProductosMLMaestro::dispatch();
+        $tiempoTotal = $inicio->diffInSeconds(now());
+        $minutos = floor($tiempoTotal / 60);
+        $segundos = $tiempoTotal % 60;
+        $tiempoStr = $minutos > 0 ? "{$minutos}m {$segundos}s" : "{$segundos}s";
 
-        return redirect()->route('dashboard')
-            ->with('success', "🚀 Sincronización de {$totalProductos} productos iniciada en segundo plano.");
+        $mensaje = "✅ Sincronización completada en {$tiempoStr}:<br>";
+        $mensaje .= "• {$sincronizados} productos sincronizados";
+        if ($pausados > 0) $mensaje .= "<br>• ⏸️ {$pausados} pausados en ML";
+        if ($errores > 0) $mensaje .= "<br>• ⚠️ {$errores} errores (ver logs)";
+
+        return redirect()->route('dashboard')->with('success', $mensaje);
+
     } catch (\Exception $e) {
         Log::error('[Sync] Error: ' . $e->getMessage());
         return redirect()->route('dashboard')->with('error', '❌ Error: ' . $e->getMessage());
@@ -556,6 +556,12 @@ Route::get('/sync-progress', function () {
         ]);
     }
 })->name('sync.progress');
+
+Route::get('productos/ventas-30-dias', [ExcelController::class, 'mostrarFormularioVentas30Dias'])
+    ->name('productos.ventas-30-dias');
+
+Route::post('productos/calcular-ventas-30-dias', [ExcelController::class, 'calcularVentas30Dias'])
+    ->name('productos.calcular-ventas-30dias');
     
 });
 
