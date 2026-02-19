@@ -32,27 +32,28 @@ class Variante extends Model
      */
     public function getStockTotalAttribute(): int
     {
-        return $this->productos->sum(function ($producto) {
-            return $producto->stock_bodega 
-                + $producto->stock_enviado_full 
+        return (int) $this->productos->sum(function ($producto) {
+            return ($producto->stock_bodega ?? 0) 
+                + ($producto->stock_enviado_full ?? 0) 
                 + ($producto->stock_full ?? 0);
         });
     }
 
     /**
-     * Ventas totales de la variante (suma de todas las fundas compatibles)
+     * Ventas totales de la variante
      */
     public function getVentasTotalesAttribute(): int
     {
-        return $this->productos->sum('ventas_totales');
+        return (int) $this->productos->sum('ventas_totales');
     }
 
     /**
      * Ventas de 30 días de la variante
+     * Nota: Asegúrate que el modelo Producto tenga 'ventas_30_dias_calculadas'
      */
     public function getVentas30DiasAttribute(): int
     {
-        return $this->productos->sum('ventas_30_dias_calculadas');
+        return (int) $this->productos->sum('ventas_30_dias_calculadas');
     }
 
     /**
@@ -60,13 +61,12 @@ class Variante extends Model
      */
     public function getConsumoDiarioAttribute(): float
     {
-        $ventas30 = $this->ventas_30_dias;
+        $ventas30 = $this->ventas_30_dias; // Accede al accessor definido arriba
         return $ventas30 > 0 ? round($ventas30 / 30, 2) : 0;
     }
 
     /**
      * Recomendación de fabricación
-     * 
      * Lógica: (Ventas 30 días × 2) - Stock Total
      */
     public function getRecomendacionFabricacionAttribute(): int
@@ -77,18 +77,9 @@ class Variante extends Model
             return 0;
         }
         
-        $inventarioDeseado = $ventas30 * 2; // 60 días de inventario
+        $inventarioDeseado = $ventas30 * 2; // Objetivo: 60 días de stock
         $faltante = $inventarioDeseado - $this->stock_total;
         
-        return max(0, $faltante);
-    }
-
-    /**
-     * Actualizar contadores (se llama cuando un producto cambia)
-     */
-    public function actualizarContadores(): void
-    {
-        // Por ahora no hace nada, los atributos se calculan dinámicamente
-        // En el futuro podríamos cachear estos valores si es necesario
+        return (int) max(0, $faltante);
     }
 }

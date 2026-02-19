@@ -6,6 +6,7 @@ use App\Models\Variante;
 use App\Models\Producto;
 use Illuminate\Http\Request;
 
+
 class VarianteController extends Controller
 {
     public function index()

@@ -53,7 +53,7 @@
                 @method('PUT')
 
                 <div class="p-8 space-y-6">
-                    {{-- Campos básicos en grid --}}
+                    {{-- Campos básicos --}}
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {{-- Nombre --}}
                         <div>
@@ -96,7 +96,7 @@
 
                     <div class="border-t-2 border-gray-100 pt-6"></div>
 
-                    {{-- Fundas actuales (collapsible) --}}
+                    {{-- Fundas actuales --}}
                     <details class="p-5 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl border-2 border-blue-200" open>
                         <summary class="cursor-pointer text-base font-bold text-blue-900 hover:text-blue-700 transition flex items-center justify-between">
                             <span class="flex items-center">
@@ -167,7 +167,7 @@
                                     $tieneOtraVariante = $producto->usa_variante_para_fabricacion && !$estaSeleccionado;
                                 @endphp
                                 <label
-                                    class="producto-item flex items-center p-3 hover:bg-white rounded-xl transition-all cursor-pointer mb-2 border-2 border-transparent hover:border-purple-200 {{ $tieneOtraVariante ? 'opacity-40' : '' }}"
+                                    class="producto-item flex items-center p-3 hover:bg-white rounded-xl transition-all cursor-pointer mb-2 border-2 border-transparent hover:border-purple-200 hover:shadow-sm {{ $tieneOtraVariante ? 'opacity-40' : '' }}"
                                     data-nombre="{{ strtolower($producto->nombre) }}"
                                     data-sku="{{ strtolower($producto->sku_ml) }}">
                                     <input type="checkbox" name="productos[]" value="{{ $producto->id }}"
@@ -198,8 +198,8 @@
                     </div>
                 </div>
 
-                {{-- Botones --}}
-                <div class="px-8 py-6 bg-gray-50 border-t-2 border-gray-100 flex flex-col sm:flex-row justify-end gap-3">
+                {{-- Botones ARREGLADOS --}}
+                <div class="px-8 py-6 bg-gray-50 border-t-2 border-gray-100 flex flex-col-reverse sm:flex-row justify-end gap-3">
                     <a href="{{ route('variantes.index') }}"
                         class="inline-flex items-center justify-center px-6 py-3 bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300 rounded-xl font-semibold transition-all shadow-sm hover:shadow">
                         <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
