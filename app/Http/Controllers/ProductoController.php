@@ -20,24 +20,24 @@ class ProductoController extends Controller
     {
         $buscar = $request->get('buscar');
         $filtro = $request->get('filtro');
-        
+
         $query = Producto::where('activo', true);
 
         // 🛠 Lógica centralizada de Stock Real para cálculos
         $stockReal = "(stock_bodega + stock_enviado_full + COALESCE(stock_full, 0))";
         // ✅ CAMBIADO: usar ventas_30_dias_calculadas en lugar de ventas_30_dias
         $promedioVenta = "(COALESCE(ventas_30_dias_calculadas, 0) / 30)";
-        
+
         // Búsqueda por texto
         if ($buscar) {
-            $query->where(function($q) use ($buscar) {
+            $query->where(function ($q) use ($buscar) {
                 $q->where('nombre', 'like', "%{$buscar}%")
-                  ->orWhere('modelo', 'like', "%{$buscar}%")
-                  ->orWhere('sku_ml', 'like', "%{$buscar}%")
-                  ->orWhere('codigo_interno_ml', 'like', "%{$buscar}%");
+                    ->orWhere('modelo', 'like', "%{$buscar}%")
+                    ->orWhere('sku_ml', 'like', "%{$buscar}%")
+                    ->orWhere('codigo_interno_ml', 'like', "%{$buscar}%");
             });
         }
-        
+
         // Filtros por estado ajustados
         if ($filtro) {
             switch ($filtro) {
@@ -48,7 +48,7 @@ class ProductoController extends Controller
                         ELSE false 
                     END");
                     break;
-                    
+
                 case 'urgentes':
                     $query->whereRaw("CASE 
                         WHEN $promedioVenta > 0 
@@ -56,14 +56,14 @@ class ProductoController extends Controller
                         ELSE false 
                     END");
                     break;
-                    
+
                 case 'necesitan_fabricacion':
                     $query->whereRaw("GREATEST(
                         CEILING(($promedioVenta * 15) - $stockReal),
                         0
                     ) > 0");
                     break;
-                    
+
                 case 'stock_ok':
                     $query->whereRaw("GREATEST(
                         CEILING(($promedioVenta * 15) - $stockReal),
@@ -72,13 +72,13 @@ class ProductoController extends Controller
                     break;
             }
         }
-        
+
         $productos = $query
             ->orderByRaw('CASE WHEN codigo_interno_ml IS NOT NULL AND codigo_interno_ml != "" THEN 0 ELSE 1 END')
             ->orderBy('nombre')
             ->paginate(50)
             ->appends($request->all());
-        
+
         // Contadores corregidos
         $contadores = [
             'todos' => Producto::where('activo', true)->count(),
@@ -105,7 +105,7 @@ class ProductoController extends Controller
                     0
                 ) = 0")->count(),
         ];
-        
+
         return view('productos.index', compact('productos', 'contadores'));
     }
 
@@ -170,29 +170,27 @@ class ProductoController extends Controller
     {
         try {
             $identificador = $producto->codigo_interno_ml;
-            
+
             if (!$identificador) {
                 return redirect()->route('productos.edit', $producto)
                     ->with('error', '❌ El producto no tiene código interno de Mercado Libre.');
             }
-            
+
             $datos = $mlService->sincronizarProducto($identificador);
-            
+
             if ($datos['status'] === 'error') {
                 return redirect()->route('productos.edit', $producto)
                     ->with('error', '❌ Error al sincronizar con la API de ML.');
             }
 
-            // ✅ CAMBIADO: guardar en ventas_totales
             $producto->update([
-                'stock_full' => $datos['stock_full'],
-                'ventas_totales' => $datos['ventas_totales'], // ← CAMBIADO
+                'stock_full' => $datos['stock_full'] ?? 0,
+                'ventas_30_dias' => $datos['ventas_totales'] ?? 0,
                 'ml_ultimo_sync' => $datos['sincronizado_en'],
             ]);
 
             return redirect()->route('productos.edit', $producto)
                 ->with('success', "✅ Sincronizado | Stock Full: {$datos['stock_full']} | Ventas Totales: {$datos['ventas_totales']}");
-
         } catch (\Exception $e) {
             Log::error("[Producto Sync] Error: " . $e->getMessage());
             return redirect()->route('productos.edit', $producto)->with('error', '❌ Error: ' . $e->getMessage());
@@ -201,37 +199,35 @@ class ProductoController extends Controller
 
     public function sincronizarTodos()
     {
-        set_time_limit(600); 
-        
+        set_time_limit(600);
+
         try {
             $sincronizados = 0;
             $errores = 0;
             $sinCodigo = 0;
 
-            Producto::where('activo', true)->chunk(50, function($productos) use (&$sincronizados, &$errores, &$sinCodigo) {
+            Producto::where('activo', true)->chunk(50, function ($productos) use (&$sincronizados, &$errores, &$sinCodigo) {
                 foreach ($productos as $producto) {
                     try {
                         if (!$producto->codigo_interno_ml) {
                             $sinCodigo++;
                             continue;
                         }
-                        
+
                         $datos = $this->mlService->sincronizarProducto($producto->codigo_interno_ml);
-                        
+
                         if ($datos['status'] !== 'error') {
-                            // ✅ CAMBIADO: guardar en ventas_totales
                             $producto->update([
-                                'stock_full' => $datos['stock_full'],
-                                'ventas_totales' => $datos['ventas_totales'], // ← CAMBIADO
+                                'stock_full' => $datos['stock_full'] ?? 0,
+                                'ventas_30_dias' => $datos['ventas_totales'] ?? 0, // ✅
                                 'ml_ultimo_sync' => $datos['sincronizado_en'],
                             ]);
                             $sincronizados++;
                         } else {
                             $errores++;
                         }
-                        
+
                         usleep(250000);
-                        
                     } catch (\Exception $e) {
                         $errores++;
                         Log::error("[Sync Todos] Error en ID {$producto->id}: {$e->getMessage()}");
@@ -242,7 +238,6 @@ class ProductoController extends Controller
             $mensaje = "📊 Sincronización Finalizada: ✅ $sincronizados actualizados | ⚠️ $errores errores | ℹ️ $sinCodigo sin código.";
 
             return redirect()->route('productos.index')->with('success', $mensaje);
-
         } catch (\Exception $e) {
             Log::error("[Sync Todos] Error general: {$e->getMessage()}");
             return redirect()->route('productos.index')->with('error', '❌ Error crítico en sincronización.');
