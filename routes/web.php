@@ -151,10 +151,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
                         $pausados++;
                     }
 
-                    // ✅ CORREGIDO: ventas_totales → ventas_30_dias
                     $producto->update([
                         'stock_full' => $datos['stock_full'] ?? 0,
-                        'ventas_30_dias' => $datos['ventas_totales'] ?? 0,
+                        'ventas_totales' => $datos['ventas_totales'] ?? 0, // ✅
                         'ml_published_at' => $datos['ml_published_at'] ?? null,
                         'ml_ultimo_sync' => $datos['sincronizado_en'],
                     ]);
@@ -251,10 +250,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
             $mlService = new \App\Services\MercadoLibreService();
             $datos = $mlService->sincronizarProducto($producto->codigo_interno_ml);
 
-            // ✅ CORREGIDO
             $producto->update([
                 'stock_full' => $datos['stock_full'] ?? 0,
-                'ventas_30_dias' => $datos['ventas_totales'] ?? 0,
+                'ventas_totales' => $datos['ventas_totales'] ?? 0, // ✅
                 'ml_published_at' => $datos['ml_published_at'] ?? null,
                 'ml_ultimo_sync' => $datos['sincronizado_en'],
             ]);
@@ -267,7 +265,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 'datos_ml' => $datos,
                 'actualizado' => [
                     'stock_full' => $producto->fresh()->stock_full,
-                    'ventas_30_dias' => $producto->fresh()->ventas_30_dias,
+                    'ventas_totales' => $producto->fresh()->ventas_totales, // ✅
                 ]
             ], 200, [], JSON_PRETTY_PRINT);
         } catch (\Exception $e) {
@@ -298,10 +296,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
             $datos = $mlService->sincronizarProducto($producto->codigo_interno_ml);
 
-            // ✅ CORREGIDO
+
             $producto->update([
                 'stock_full' => $datos['stock_full'] ?? 0,
-                'ventas_30_dias' => $datos['ventas_totales'] ?? 0, // ✅ AQUÍ
+                'ventas_totales' => $datos['ventas_totales'] ?? 0,
                 'ml_published_at' => $datos['ml_published_at'] ?? null,
                 'ml_ultimo_sync' => $datos['sincronizado_en'],
             ]);
@@ -313,7 +311,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 'datos' => $datos,
                 'actualizado' => [
                     'stock_full' => $producto->fresh()->stock_full,
-                    'ventas_30_dias' => $producto->fresh()->ventas_30_dias,
+                    'ventas_totales' => $producto->fresh()->ventas_totales, // ✅
                 ]
             ], 200, [], JSON_PRETTY_PRINT);
         } catch (\Exception $e) {
