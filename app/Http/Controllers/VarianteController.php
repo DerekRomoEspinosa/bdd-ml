@@ -6,17 +6,23 @@ use App\Models\Variante;
 use App\Models\Producto;
 use Illuminate\Http\Request;
 
-
 class VarianteController extends Controller
 {
     public function index()
     {
-        $variantes = Variante::where('activo', true)
-            ->with('productos')
-            ->orderBy('nombre')
-            ->get();
+        try {
+            $variantes = Variante::where('activo', true)
+                ->with('productos')
+                ->orderBy('nombre')
+                ->get();
 
-        return view('variantes.index', compact('variantes'));
+            return view('variantes.index', compact('variantes'));
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function create()
@@ -42,15 +48,13 @@ class VarianteController extends Controller
 
         $variante = Variante::create([
             'nombre' => $validated['nombre'],
-            'descripcion' => $validated['descripcion'],
-            'notas' => $validated['notas'],
+            'descripcion' => $validated['descripcion'] ?? null,
+            'notas' => $validated['notas'] ?? null,
             'activo' => true,
         ]);
 
-        // Asociar productos
         $variante->productos()->attach($validated['productos']);
 
-        // Marcar productos como "usan variante"
         Producto::whereIn('id', $validated['productos'])
             ->update(['usa_variante_para_fabricacion' => true]);
 
@@ -81,22 +85,19 @@ class VarianteController extends Controller
 
         $variante->update([
             'nombre' => $validated['nombre'],
-            'descripcion' => $validated['descripcion'],
-            'notas' => $validated['notas'],
+            'descripcion' => $validated['descripcion'] ?? null,
+            'notas' => $validated['notas'] ?? null,
         ]);
 
-        // Productos anteriores
         $productosAnteriores = $variante->productos()->pluck('productos.id')->toArray();
 
-        // Sincronizar productos
         $variante->productos()->sync($validated['productos']);
 
-        // Marcar nuevos productos como "usan variante"
         Producto::whereIn('id', $validated['productos'])
             ->update(['usa_variante_para_fabricacion' => true]);
 
-        // Desmarcar productos que ya no están en la variante
         $productosRemovidos = array_diff($productosAnteriores, $validated['productos']);
+
         if (!empty($productosRemovidos)) {
             Producto::whereIn('id', $productosRemovidos)
                 ->whereDoesntHave('variantes')
@@ -114,7 +115,6 @@ class VarianteController extends Controller
         $variante->productos()->detach();
         $variante->update(['activo' => false]);
 
-        // Desmarcar productos
         Producto::whereIn('id', $productos)
             ->whereDoesntHave('variantes')
             ->update(['usa_variante_para_fabricacion' => false]);

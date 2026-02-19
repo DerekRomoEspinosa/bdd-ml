@@ -18,48 +18,37 @@ class Variante extends Model
         'activo' => 'boolean',
     ];
 
-    /*
-    |--------------------------------------------------------------------------
-    | RELACIÓN
-    |--------------------------------------------------------------------------
-    */
-
     public function productos(): BelongsToMany
     {
         return $this->belongsToMany(\App\Models\Producto::class, 'producto_variante')
             ->withTimestamps();
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | ACCESSORS
-    |--------------------------------------------------------------------------
-    */
-
-    // 🔥 Ventas totales (lo que usa tu vista)
     public function getVentasTotalesAttribute(): int
     {
-        return (int) $this->productos->sum(function ($producto) {
-            return $producto->ventas_totales ?? 0;
-        });
+        if (!$this->relationLoaded('productos')) {
+            $this->load('productos');
+        }
+
+        return (int) $this->productos->sum(fn($producto) =>
+            $producto->ventas_totales ?? 0
+        );
     }
 
-    // 🔥 Stock total (lo que usa tu vista)
     public function getStockTotalAttribute(): int
     {
-        return (int) $this->productos->sum(function ($producto) {
-            return $producto->stock_actual ?? 0;
-        });
+        if (!$this->relationLoaded('productos')) {
+            $this->load('productos');
+        }
+
+        return (int) $this->productos->sum(fn($producto) =>
+            $producto->stock_actual ?? 0
+        );
     }
 
-    // 🔥 Recomendación fabricar
     public function getRecomendacionFabricacionAttribute(): int
     {
-        $ventas = $this->ventas_totales;
-        $stock = $this->stock_total;
-
-        $faltante = $ventas - $stock;
-
+        $faltante = $this->ventas_totales - $this->stock_total;
         return $faltante > 0 ? $faltante : 0;
     }
 }
