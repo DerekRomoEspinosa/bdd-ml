@@ -82,16 +82,16 @@ class ExcelController extends Controller
             $sheet->setCellValue('C' . $row, $p->sku_ml);
             $sheet->setCellValue('D' . $row, $p->codigo_interno_ml);
             $sheet->setCellValue('E' . $row, $p->piezas_por_plancha);
-            $sheet->setCellValue('F' . $row, $p->stock_minimo_deseado); // ✅ NUEVA COLUMNA
+            $sheet->setCellValue('F' . $row, $p->stock_minimo_deseado); 
             $sheet->setCellValue('G' . $row, $p->stock_bodega);
             $sheet->setCellValue('H' . $row, $p->stock_cortado);
             $sheet->setCellValue('I' . $row, $p->stock_costura);
             $sheet->setCellValue('J' . $row, $p->stock_por_empacar);
             $sheet->setCellValue('K' . $row, $p->stock_enviado_full);
             $sheet->setCellValue('L' . $row, $p->stock_full);
-            $sheet->setCellValue('M' . $row, $p->ventas_30_dias);
-            $sheet->setCellValue('N' . $row, $p->stock_total); // Calculado por el modelo
-            $sheet->setCellValue('O' . $row, $p->recomendacion_fabricacion); // ✅ NUEVO
+            $sheet->setCellValue('M' . $row, $p->ventas_totales);
+            $sheet->setCellValue('N' . $row, $p->stock_total); 
+            $sheet->setCellValue('O' . $row, $p->recomendacion_fabricacion); 
             $sheet->setCellValue('P' . $row, $p->plantilla_corte_url);
             
             // ✅ Colorear fila si necesita fabricación
