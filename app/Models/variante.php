@@ -19,7 +19,7 @@ class Variante extends Model
     ];
 
     /**
-     * Productos que pertenecen a esta variante
+     * Productos asociados
      */
     public function productos(): BelongsToMany
     {
@@ -28,7 +28,7 @@ class Variante extends Model
     }
 
     /**
-     * Stock total de la variante (suma de todos sus productos)
+     * Atributos calculados (Accessors)
      */
     public function getStockTotalAttribute(): int
     {
@@ -39,47 +39,18 @@ class Variante extends Model
         });
     }
 
-    /**
-     * Ventas totales de la variante
-     */
-    public function getVentasTotalesAttribute(): int
-    {
-        return (int) $this->productos->sum('ventas_totales');
-    }
-
-    /**
-     * Ventas de 30 días de la variante
-     * Nota: Asegúrate que el modelo Producto tenga 'ventas_30_dias_calculadas'
-     */
     public function getVentas30DiasAttribute(): int
     {
+        // Nota: Asegúrate que el modelo Producto tenga este campo o lógica similar
         return (int) $this->productos->sum('ventas_30_dias_calculadas');
     }
 
-    /**
-     * Consumo diario promedio
-     */
-    public function getConsumoDiarioAttribute(): float
-    {
-        $ventas30 = $this->ventas_30_dias; // Accede al accessor definido arriba
-        return $ventas30 > 0 ? round($ventas30 / 30, 2) : 0;
-    }
-
-    /**
-     * Recomendación de fabricación
-     * Lógica: (Ventas 30 días × 2) - Stock Total
-     */
     public function getRecomendacionFabricacionAttribute(): int
     {
         $ventas30 = $this->ventas_30_dias;
-        
-        if ($ventas30 <= 0) {
-            return 0;
-        }
-        
-        $inventarioDeseado = $ventas30 * 2; // Objetivo: 60 días de stock
-        $faltante = $inventarioDeseado - $this->stock_total;
-        
-        return (int) max(0, $faltante);
+        if ($ventas30 <= 0) return 0;
+
+        $objetivo = $ventas30 * 2; 
+        return (int) max(0, $objetivo - $this->stock_total);
     }
 }
