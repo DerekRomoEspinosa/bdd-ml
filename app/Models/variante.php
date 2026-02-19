@@ -18,39 +18,48 @@ class Variante extends Model
         'activo' => 'boolean',
     ];
 
-    /**
-     * Productos asociados
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | RELACIÓN
+    |--------------------------------------------------------------------------
+    */
+
     public function productos(): BelongsToMany
     {
-        return $this->belongsToMany(Producto::class, 'producto_variante')
+        return $this->belongsToMany(\App\Models\Producto::class, 'producto_variante')
             ->withTimestamps();
     }
 
-    /**
-     * Atributos calculados (Accessors)
-     */
-    public function getStockTotalAttribute(): int
+    /*
+    |--------------------------------------------------------------------------
+    | ACCESSORS
+    |--------------------------------------------------------------------------
+    */
+
+    // 🔥 Ventas totales (lo que usa tu vista)
+    public function getVentasTotalesAttribute(): int
     {
         return (int) $this->productos->sum(function ($producto) {
-            return ($producto->stock_bodega ?? 0) 
-                + ($producto->stock_enviado_full ?? 0) 
-                + ($producto->stock_full ?? 0);
+            return $producto->ventas_totales ?? 0;
         });
     }
 
-    public function getVentas30DiasAttribute(): int
+    // 🔥 Stock total (lo que usa tu vista)
+    public function getStockTotalAttribute(): int
     {
-        // Nota: Asegúrate que el modelo Producto tenga este campo o lógica similar
-        return (int) $this->productos->sum('ventas_30_dias_calculadas');
+        return (int) $this->productos->sum(function ($producto) {
+            return $producto->stock_actual ?? 0;
+        });
     }
 
+    // 🔥 Recomendación fabricar
     public function getRecomendacionFabricacionAttribute(): int
     {
-        $ventas30 = $this->ventas_30_dias;
-        if ($ventas30 <= 0) return 0;
+        $ventas = $this->ventas_totales;
+        $stock = $this->stock_total;
 
-        $objetivo = $ventas30 * 2; 
-        return (int) max(0, $objetivo - $this->stock_total);
+        $faltante = $ventas - $stock;
+
+        return $faltante > 0 ? $faltante : 0;
     }
 }
