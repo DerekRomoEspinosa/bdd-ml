@@ -234,11 +234,23 @@
                                             <tr class="hover:bg-blue-50 transition-colors duration-150">
                                                 {{-- PRODUCTO --}}
                                                 <td class="px-6 py-4">
-                                                    <div class="text-sm font-semibold text-gray-900">
-                                                        {{ $producto->nombre }}
+                                                    <div>
+                                                        <div class="flex items-center gap-2">
+                                                            <div class="font-semibold text-gray-900 text-sm">
+                                                                {{ $producto->nombre }}
+                                                            </div>
+
+                                                            {{-- Badge de variante --}}
+                                                            @if ($producto->usa_variante_para_fabricacion && $producto->variantes->isNotEmpty())
+                                                                <span
+                                                                    class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-purple-100 text-purple-700 border border-purple-300">
+                                                                    🔗 {{ $producto->variantes->first()->nombre }}
+                                                                </span>
+                                                            @endif
+                                                        </div>
+                                                        <div class="text-xs text-gray-500 mt-1">
+                                                            {{ $producto->sku_ml }}</div>
                                                     </div>
-                                                    <div class="text-xs text-gray-500 mt-1 font-mono">
-                                                        {{ $producto->sku_ml }}</div>
                                                 </td>
 
                                                 {{-- PLANTILLA DE CORTE --}}
@@ -315,170 +327,184 @@
                                                             </span>
                                                         </div>
                                                     </div>
-                                                    @if ($producto->ml_ultimo_sync)
-                                                        <div class="text-xs text-gray-400 mt-2">
-                                                            Sync: {{ $producto->ml_ultimo_sync->diffForHumans() }}
+                                                    @if ($producto->ventas_30_dias_calculadas > 0)
+                                                        <div
+                                                            class="flex justify-between border-t border-gray-200 pt-1 mt-1">
+                                                            <span>Ventas 30 días:</span>
+                                                            <strong
+                                                                class="text-green-600 font-bold">{{ number_format($producto->ventas_30_dias_calculadas) }}</strong>
                                                         </div>
                                                     @endif
-                                                </td>
 
-                                                {{-- STOCK TOTAL --}}
-                                                <td class="px-6 py-4 whitespace-nowrap text-center">
-                                                    <span
-                                                        class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-blue-100 text-blue-800">
-                                                        {{ $producto->stock_total }}
-                                                    </span>
-                                                </td>
-
-                                                {{-- FABRICAR --}}
-                                                <td class="px-6 py-4 whitespace-nowrap text-center">
-                                                    @if ($producto->recomendacion_fabricacion > 0)
-                                                        <span
-                                                            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-red-100 text-red-800">
-                                                            {{ $producto->recomendacion_fabricacion }} uds
-                                                        </span>
-                                                    @else
-                                                        <span
-                                                            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-green-100 text-green-800">
-                                                            ✓ Stock OK
-                                                        </span>
-                                                    @endif
-                                                </td>
-
-                                                {{-- ACCIONES --}}
-                                                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                    <div class="flex justify-end gap-2">
-                                                        <a href="{{ route('productos.edit', $producto) }}"
-                                                            class="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition">
-                                                            Editar
-                                                        </a>
-                                                        <form action="{{ route('productos.destroy', $producto) }}"
-                                                            method="POST" class="inline"
-                                                            onsubmit="return confirm('¿Estás seguro de eliminar este producto?');">
-                                                            @csrf
-                                                            @method('DELETE')
-                                                            <button type="submit"
-                                                                class="inline-flex items-center px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg transition">
-                                                                Eliminar
-                                                            </button>
-                                                        </form>
+                                                    <div class="flex justify-between text-xs text-gray-400">
+                                                        <span>Sync:</span>
+                                                        <span>{{ $producto->ml_ultimo_sync ? $producto->ml_ultimo_sync->diffForHumans() : 'nunca' }}</span>
                                                     </div>
-                                                </td>
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
                             </div>
-
-                            {{-- Paginación --}}
-                            @if ($productos->hasPages())
-                                <div
-                                    class="mt-6 flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 rounded-b-xl">
-                                    <div class="flex flex-1 justify-between sm:hidden">
-                                        @if ($productos->onFirstPage())
-                                            <span
-                                                class="relative inline-flex items-center rounded-md border border-gray-300 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-400">
-                                                Anterior
-                                            </span>
-                                        @else
-                                            <a href="{{ $productos->previousPageUrl() }}"
-                                                class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-                                                Anterior
-                                            </a>
-                                        @endif
-
-                                        @if ($productos->hasMorePages())
-                                            <a href="{{ $productos->nextPageUrl() }}"
-                                                class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-                                                Siguiente
-                                            </a>
-                                        @else
-                                            <span
-                                                class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-400">
-                                                Siguiente
-                                            </span>
-                                        @endif
-                                    </div>
-                                    <div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-                                        <div>
-                                            <p class="text-sm text-gray-700">
-                                                Mostrando
-                                                <span class="font-medium">{{ $productos->firstItem() }}</span>
-                                                a
-                                                <span class="font-medium">{{ $productos->lastItem() }}</span>
-                                                de
-                                                <span class="font-medium">{{ $productos->total() }}</span>
-                                                productos
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <nav class="isolate inline-flex -space-x-px rounded-md shadow-sm">
-                                                {{-- Botón Anterior --}}
-                                                @if ($productos->onFirstPage())
-                                                    <span
-                                                        class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 cursor-not-allowed">
-                                                        <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                                            <path fill-rule="evenodd"
-                                                                d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z"
-                                                                clip-rule="evenodd" />
-                                                        </svg>
-                                                    </span>
-                                                @else
-                                                    <a href="{{ $productos->previousPageUrl() }}"
-                                                        class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
-                                                        <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                                            <path fill-rule="evenodd"
-                                                                d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z"
-                                                                clip-rule="evenodd" />
-                                                        </svg>
-                                                    </a>
-                                                @endif
-
-                                                {{-- Números de página --}}
-                                                @foreach ($productos->getUrlRange(1, $productos->lastPage()) as $page => $url)
-                                                    @if ($page == $productos->currentPage())
-                                                        <span
-                                                            class="relative z-10 inline-flex items-center bg-blue-600 px-4 py-2 text-sm font-semibold text-white">
-                                                            {{ $page }}
-                                                        </span>
-                                                    @else
-                                                        <a href="{{ $url }}"
-                                                            class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
-                                                            {{ $page }}
-                                                        </a>
-                                                    @endif
-                                                @endforeach
-
-                                                {{-- Botón Siguiente --}}
-                                                @if ($productos->hasMorePages())
-                                                    <a href="{{ $productos->nextPageUrl() }}"
-                                                        class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
-                                                        <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                                            <path fill-rule="evenodd"
-                                                                d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
-                                                                clip-rule="evenodd" />
-                                                        </svg>
-                                                    </a>
-                                                @else
-                                                    <span
-                                                        class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 cursor-not-allowed">
-                                                        <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                                            <path fill-rule="evenodd"
-                                                                d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
-                                                                clip-rule="evenodd" />
-                                                        </svg>
-                                                    </span>
-                                                @endif
-                                            </nav>
-                                        </div>
-                                    </div>
+                            @if ($producto->ml_ultimo_sync)
+                                <div class="text-xs text-gray-400 mt-2">
+                                    Sync: {{ $producto->ml_ultimo_sync->diffForHumans() }}
                                 </div>
                             @endif
+                            </td>
 
-                        @endif
-                    @endif
+                            {{-- STOCK TOTAL --}}
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                <span
+                                    class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-blue-100 text-blue-800">
+                                    {{ $producto->stock_total }}
+                                </span>
+                            </td>
+
+                            {{-- FABRICAR --}}
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                @if ($producto->recomendacion_fabricacion > 0)
+                                    <span
+                                        class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-red-100 text-red-800">
+                                        {{ $producto->recomendacion_fabricacion }} uds
+                                    </span>
+                                @else
+                                    <span
+                                        class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-green-100 text-green-800">
+                                        ✓ Stock OK
+                                    </span>
+                                @endif
+                            </td>
+
+                            {{-- ACCIONES --}}
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <div class="flex justify-end gap-2">
+                                    <a href="{{ route('productos.edit', $producto) }}"
+                                        class="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition">
+                                        Editar
+                                    </a>
+                                    <form action="{{ route('productos.destroy', $producto) }}" method="POST"
+                                        class="inline"
+                                        onsubmit="return confirm('¿Estás seguro de eliminar este producto?');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit"
+                                            class="inline-flex items-center px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg transition">
+                                            Eliminar
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                            </tr>
+                        @endforeach
+                        </tbody>
+                        </table>
                 </div>
+
+                {{-- Paginación --}}
+                @if ($productos->hasPages())
+                    <div
+                        class="mt-6 flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 rounded-b-xl">
+                        <div class="flex flex-1 justify-between sm:hidden">
+                            @if ($productos->onFirstPage())
+                                <span
+                                    class="relative inline-flex items-center rounded-md border border-gray-300 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-400">
+                                    Anterior
+                                </span>
+                            @else
+                                <a href="{{ $productos->previousPageUrl() }}"
+                                    class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                    Anterior
+                                </a>
+                            @endif
+
+                            @if ($productos->hasMorePages())
+                                <a href="{{ $productos->nextPageUrl() }}"
+                                    class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                    Siguiente
+                                </a>
+                            @else
+                                <span
+                                    class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-400">
+                                    Siguiente
+                                </span>
+                            @endif
+                        </div>
+                        <div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                            <div>
+                                <p class="text-sm text-gray-700">
+                                    Mostrando
+                                    <span class="font-medium">{{ $productos->firstItem() }}</span>
+                                    a
+                                    <span class="font-medium">{{ $productos->lastItem() }}</span>
+                                    de
+                                    <span class="font-medium">{{ $productos->total() }}</span>
+                                    productos
+                                </p>
+                            </div>
+                            <div>
+                                <nav class="isolate inline-flex -space-x-px rounded-md shadow-sm">
+                                    {{-- Botón Anterior --}}
+                                    @if ($productos->onFirstPage())
+                                        <span
+                                            class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 cursor-not-allowed">
+                                            <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fill-rule="evenodd"
+                                                    d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z"
+                                                    clip-rule="evenodd" />
+                                            </svg>
+                                        </span>
+                                    @else
+                                        <a href="{{ $productos->previousPageUrl() }}"
+                                            class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
+                                            <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fill-rule="evenodd"
+                                                    d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z"
+                                                    clip-rule="evenodd" />
+                                            </svg>
+                                        </a>
+                                    @endif
+
+                                    {{-- Números de página --}}
+                                    @foreach ($productos->getUrlRange(1, $productos->lastPage()) as $page => $url)
+                                        @if ($page == $productos->currentPage())
+                                            <span
+                                                class="relative z-10 inline-flex items-center bg-blue-600 px-4 py-2 text-sm font-semibold text-white">
+                                                {{ $page }}
+                                            </span>
+                                        @else
+                                            <a href="{{ $url }}"
+                                                class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
+                                                {{ $page }}
+                                            </a>
+                                        @endif
+                                    @endforeach
+
+                                    {{-- Botón Siguiente --}}
+                                    @if ($productos->hasMorePages())
+                                        <a href="{{ $productos->nextPageUrl() }}"
+                                            class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
+                                            <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fill-rule="evenodd"
+                                                    d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+                                                    clip-rule="evenodd" />
+                                            </svg>
+                                        </a>
+                                    @else
+                                        <span
+                                            class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 cursor-not-allowed">
+                                            <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fill-rule="evenodd"
+                                                    d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+                                                    clip-rule="evenodd" />
+                                            </svg>
+                                        </span>
+                                    @endif
+                                </nav>
+                            </div>
+                        </div>
+                    </div>
+                @endif
+
+                @endif
+                @endif
             </div>
         </div>
+    </div>
     </div>
 </x-app-layout>

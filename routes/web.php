@@ -67,7 +67,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // ============================================
     // PRODUCTOS
     // ============================================
-    Route::resource('productos', ProductoController::class);
+Route::resource('productos', ProductoController::class)->except(['show']);
 
     // ============================================
     // VARIANTES ✅ NUEVO

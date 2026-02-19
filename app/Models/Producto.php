@@ -81,29 +81,31 @@ class Producto extends Model
         return $this->piezas_por_plancha * 2;
     }
 
-    /**
-     * Recomendación de Fabricación
-     * 
-     * Si usa variante: NO mostrar (lo muestra la variante)
-     * Si NO usa variante: calcular basado en stock mínimo
-     */
-    public function getRecomendacionFabricacionAttribute(): int
-    {
-        // Si usa variante, no calcular aquí
-        if ($this->usa_variante_para_fabricacion) {
-            return 0;
-        }
-
-        $stockMinimo = $this->stock_minimo;
-        
-        if ($stockMinimo <= 0) {
-            return 0;
-        }
-        
-        $faltante = $stockMinimo - $this->stock_total;
-        
-        return max(0, $faltante);
+/**
+ * Calcular recomendación de fabricación
+ * 
+ * Si usa variante: NO calcular (se calcula en la variante)
+ * Si NO usa variante: calcular basado en ventas de 30 días
+ */
+public function getRecomendacionFabricacionAttribute(): int
+{
+    // Si usa variante, no calcular aquí (lo hace la variante)
+    if ($this->usa_variante_para_fabricacion) {
+        return 0;
     }
+
+    // Si no tiene ventas en 30 días, no fabricar
+    if (!$this->ventas_30_dias_calculadas || $this->ventas_30_dias_calculadas <= 0) {
+        return 0;
+    }
+    
+    // Calcular: (Ventas 30 días × 2) - Stock Total
+    // Esto da inventario para 60 días
+    $inventarioDeseado = $this->ventas_30_dias_calculadas * 2;
+    $faltante = $inventarioDeseado - $this->stock_total;
+    
+    return max(0, (int) $faltante);
+}
 
     /**
      * Consumo diario promedio

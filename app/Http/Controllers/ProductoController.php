@@ -74,6 +74,7 @@ class ProductoController extends Controller
         }
 
         $productos = $query
+            ->with('variantes')
             ->orderByRaw('CASE 
         WHEN ventas_totales > 0 OR stock_full > 0 THEN 0 
         ELSE 1 
