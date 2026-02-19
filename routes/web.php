@@ -4,6 +4,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\ExcelController;
 use App\Http\Controllers\MLAuthController;
+use App\Http\Controllers\VarianteController; // ✅ AGREGAR
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -63,7 +64,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
+    // ============================================
+    // PRODUCTOS
+    // ============================================
     Route::resource('productos', ProductoController::class);
+
+    // ============================================
+    // VARIANTES ✅ NUEVO
+    // ============================================
+    Route::resource('variantes', VarianteController::class);
 
     // ============================================
     // MERCADO LIBRE
@@ -153,7 +162,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
                     $producto->update([
                         'stock_full' => $datos['stock_full'] ?? 0,
-                        'ventas_totales' => $datos['ventas_totales'] ?? 0, // ✅
+                        'ventas_totales' => $datos['ventas_totales'] ?? 0,
                         'ml_published_at' => $datos['ml_published_at'] ?? null,
                         'ml_ultimo_sync' => $datos['sincronizado_en'],
                     ]);
@@ -252,7 +261,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
             $producto->update([
                 'stock_full' => $datos['stock_full'] ?? 0,
-                'ventas_totales' => $datos['ventas_totales'] ?? 0, // ✅
+                'ventas_totales' => $datos['ventas_totales'] ?? 0,
                 'ml_published_at' => $datos['ml_published_at'] ?? null,
                 'ml_ultimo_sync' => $datos['sincronizado_en'],
             ]);
@@ -265,7 +274,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 'datos_ml' => $datos,
                 'actualizado' => [
                     'stock_full' => $producto->fresh()->stock_full,
-                    'ventas_totales' => $producto->fresh()->ventas_totales, // ✅
+                    'ventas_totales' => $producto->fresh()->ventas_totales,
                 ]
             ], 200, [], JSON_PRETTY_PRINT);
         } catch (\Exception $e) {
@@ -296,7 +305,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
             $datos = $mlService->sincronizarProducto($producto->codigo_interno_ml);
 
-
             $producto->update([
                 'stock_full' => $datos['stock_full'] ?? 0,
                 'ventas_totales' => $datos['ventas_totales'] ?? 0,
@@ -311,7 +319,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 'datos' => $datos,
                 'actualizado' => [
                     'stock_full' => $producto->fresh()->stock_full,
-                    'ventas_totales' => $producto->fresh()->ventas_totales, // ✅
+                    'ventas_totales' => $producto->fresh()->ventas_totales,
                 ]
             ], 200, [], JSON_PRETTY_PRINT);
         } catch (\Exception $e) {

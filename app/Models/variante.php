@@ -12,14 +12,6 @@ class Variante extends Model
         'descripcion',
         'notas',
         'activo',
-        'stock_bodega',
-        'stock_cortado',
-        'stock_costura',
-        'stock_por_empacar',
-        'stock_enviado_full',
-        'ventas_totales',
-        'ventas_30_dias',
-        'recomendacion_fabricacion',
     ];
 
     protected $casts = [
@@ -27,7 +19,7 @@ class Variante extends Model
     ];
 
     /**
-     * Productos (fundas de bafle) compatibles con esta variante
+     * Productos que pertenecen a esta variante
      */
     public function productos(): BelongsToMany
     {
@@ -36,77 +28,67 @@ class Variante extends Model
     }
 
     /**
-     * Calcular ventas totales de todos los productos compatibles
-     */
-    public function calcularVentasTotales(): int
-    {
-        return $this->productos()
-            ->where('activo', true)
-            ->sum('ventas_totales');
-    }
-
-    /**
-     * Calcular ventas de últimos 30 días de todos los productos compatibles
-     */
-    public function calcularVentas30Dias(): int
-    {
-        return $this->productos()
-            ->where('activo', true)
-            ->sum('ventas_30_dias_calculadas');
-    }
-
-    /**
-     * Calcular stock total disponible (bodega + proceso)
+     * Stock total de la variante (suma de todos sus productos)
      */
     public function getStockTotalAttribute(): int
     {
-        return $this->stock_bodega 
-            + $this->stock_cortado 
-            + $this->stock_costura 
-            + $this->stock_por_empacar 
-            + $this->stock_enviado_full;
+        return $this->productos->sum(function ($producto) {
+            return $producto->stock_bodega 
+                + $producto->stock_enviado_full 
+                + ($producto->stock_full ?? 0);
+        });
     }
 
     /**
-     * Actualizar contadores de la variante basado en sus productos
+     * Ventas totales de la variante (suma de todas las fundas compatibles)
+     */
+    public function getVentasTotalesAttribute(): int
+    {
+        return $this->productos->sum('ventas_totales');
+    }
+
+    /**
+     * Ventas de 30 días de la variante
+     */
+    public function getVentas30DiasAttribute(): int
+    {
+        return $this->productos->sum('ventas_30_dias_calculadas');
+    }
+
+    /**
+     * Consumo diario promedio
+     */
+    public function getConsumoDiarioAttribute(): float
+    {
+        $ventas30 = $this->ventas_30_dias;
+        return $ventas30 > 0 ? round($ventas30 / 30, 2) : 0;
+    }
+
+    /**
+     * Recomendación de fabricación
+     * 
+     * Lógica: (Ventas 30 días × 2) - Stock Total
+     */
+    public function getRecomendacionFabricacionAttribute(): int
+    {
+        $ventas30 = $this->ventas_30_dias;
+        
+        if ($ventas30 <= 0) {
+            return 0;
+        }
+        
+        $inventarioDeseado = $ventas30 * 2; // 60 días de inventario
+        $faltante = $inventarioDeseado - $this->stock_total;
+        
+        return max(0, $faltante);
+    }
+
+    /**
+     * Actualizar contadores (se llama cuando un producto cambia)
      */
     public function actualizarContadores(): void
     {
-        $this->ventas_totales = $this->calcularVentasTotales();
-        $this->ventas_30_dias = $this->calcularVentas30Dias();
-        
-        // Calcular recomendación de fabricación
-        $this->calcularRecomendacionFabricacion();
-        
-        $this->save();
-    }
-
-    /**
-     * Calcular cuántas unidades se deben fabricar
-     */
-    public function calcularRecomendacionFabricacion(): void
-    {
-        $stockDisponible = $this->stock_total;
-        $ventasProyectadas = $this->ventas_30_dias * 2; // Proyección a 60 días
-        
-        $deficit = $ventasProyectadas - $stockDisponible;
-        
-        $this->recomendacion_fabricacion = max(0, $deficit);
-    }
-
-    /**
-     * Scope para variantes activas
-     */
-    public function scopeActivas($query)
-    {
-        return $query->where('activo', true);
-    }
-
-    /**
-     * Scope para variantes que necesitan fabricación
-     */
-    public function scopeNecesitanFabricacion($query)
-    {
-        return $query->where('recomendacion_fabricacion', '>', 0);
+        // Por ahora no hace nada, los atributos se calculan dinámicamente
+        // En el futuro podríamos cachear estos valores si es necesario
     }
 }
