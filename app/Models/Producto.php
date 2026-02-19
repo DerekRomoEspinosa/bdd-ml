@@ -8,10 +8,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 class Producto extends Model
 {
     protected $fillable = [
-
         'nombre',
+        'modelo', 
         'sku_ml',
         'codigo_interno_ml',
+        'plantilla_corte_url', 
+        'piezas_por_plancha', 
+        'stock_minimo_deseado', 
+        'variante_bafle', 
         'stock_bodega',
         'stock_cortado',
         'stock_costura',
@@ -22,10 +26,10 @@ class Producto extends Model
         'ventas_totales_reporte_anterior',
         'ventas_30_dias_calculadas',
         'fecha_ultimo_reporte',
+        'usa_variante_para_fabricacion', 
         'ml_ultimo_sync',
         'ml_published_at',
         'activo',
-        'recomendacion_fabricacion',
     ];
 
     protected $casts = [
@@ -34,6 +38,9 @@ class Producto extends Model
         'ml_ultimo_sync' => 'datetime',
         'ml_published_at' => 'datetime',
         'fecha_ultimo_reporte' => 'datetime',
+        'piezas_por_plancha' => 'integer',
+        'stock_minimo_deseado' => 'integer',
+        'stock_full' => 'integer',
         'ventas_totales' => 'integer',
         'ventas_totales_reporte_anterior' => 'integer',
         'ventas_30_dias_calculadas' => 'integer',
@@ -49,8 +56,67 @@ class Producto extends Model
     }
 
     /**
+     * Stock Total = Bodega + Enviado Full + Full ML
+     */
+    public function getStockTotalAttribute(): int
+    {
+        return ($this->stock_bodega ?? 0)
+            + ($this->stock_enviado_full ?? 0)
+            + ($this->stock_full ?? 0);
+    }
+
+    /**
+     * Stock mínimo: Si Carlos lo definió, usarlo. Si no, calcular 2 × piezas_por_plancha
+     */
+    public function getStockMinimoAttribute(): int
+    {
+        if ($this->stock_minimo_deseado > 0) {
+            return $this->stock_minimo_deseado;
+        }
+        
+        if (!$this->piezas_por_plancha || $this->piezas_por_plancha <= 0) {
+            return 0;
+        }
+        
+        return $this->piezas_por_plancha * 2;
+    }
+
+    /**
+     * Recomendación de Fabricación
+     * 
+     * Si usa variante: NO mostrar (lo muestra la variante)
+     * Si NO usa variante: calcular basado en stock mínimo
+     */
+    public function getRecomendacionFabricacionAttribute(): int
+    {
+        // Si usa variante, no calcular aquí
+        if ($this->usa_variante_para_fabricacion) {
+            return 0;
+        }
+
+        $stockMinimo = $this->stock_minimo;
+        
+        if ($stockMinimo <= 0) {
+            return 0;
+        }
+        
+        $faltante = $stockMinimo - $this->stock_total;
+        
+        return max(0, $faltante);
+    }
+
+    /**
+     * Consumo diario promedio
+     */
+    public function getConsumoDiarioAttribute(): float
+    {
+        return $this->ventas_30_dias_calculadas 
+            ? round($this->ventas_30_dias_calculadas / 30, 2) 
+            : 0;
+    }
+
+    /**
      * Calcular ventas de últimos 30 días
-     * (Ventas actuales - Ventas reporte anterior)
      */
     public function calcularVentas30Dias(): void
     {
@@ -66,21 +132,12 @@ class Producto extends Model
      */
     public function actualizarDesdeReporte(int $nuevasVentasTotales): void
     {
-        // Guardar ventas actuales como reporte anterior
         $this->ventas_totales_reporte_anterior = $this->ventas_totales ?? 0;
-
-        // Actualizar ventas totales
         $this->ventas_totales = $nuevasVentasTotales;
-
-        // Calcular diferencia (ventas últimos 30 días)
         $this->calcularVentas30Dias();
-
-        // Marcar fecha del reporte
         $this->fecha_ultimo_reporte = now();
-
         $this->save();
 
-        // Si tiene variantes, actualizar contadores de variantes
         if ($this->usa_variante_para_fabricacion) {
             foreach ($this->variantes as $variante) {
                 $variante->actualizarContadores();
@@ -89,52 +146,14 @@ class Producto extends Model
     }
 
     /**
-     * Calcular stock total del producto
-     */
-    public function getStockTotalAttribute(): int
-    {
-        return ($this->stock_bodega ?? 0)
-            + ($this->stock_cortado ?? 0)
-            + ($this->stock_costura ?? 0)
-            + ($this->stock_por_empacar ?? 0)
-            + ($this->stock_enviado_full ?? 0);
-    }
-
-    /**
-     * Calcular recomendación de fabricación
-     * 
-     * Si usa variante: NO calcular (se calcula en la variante)
-     * Si NO usa variante: calcular basado en sus propias ventas
-     */
-    public function calcularRecomendacionFabricacion(): void
-    {
-        if ($this->usa_variante_para_fabricacion) {
-            // No calcular, lo hace la variante
-            $this->recomendacion_fabricacion = 0;
-            $this->save();
-            return;
-        }
-
-        $stockDisponible = $this->stock_total;
-        $ventasProyectadas = ($this->ventas_30_dias_calculadas ?? 0) * 2; // 60 días
-
-        $deficit = $ventasProyectadas - $stockDisponible;
-
-        $this->recomendacion_fabricacion = max(0, $deficit);
-        $this->save();
-    }
-
-    /**
-     * Scope: Productos que NO usan variante
+     * Scopes
      */
     public function scopeSinVariante($query)
     {
-        return $query->where('usa_variante_para_fabricacion', false);
+        return $query->where('usa_variante_para_fabricacion', false)
+            ->orWhereNull('usa_variante_para_fabricacion');
     }
 
-    /**
-     * Scope: Productos que SÍ usan variante
-     */
     public function scopeConVariante($query)
     {
         return $query->where('usa_variante_para_fabricacion', true);

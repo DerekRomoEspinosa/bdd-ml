@@ -74,7 +74,11 @@ class ProductoController extends Controller
         }
 
         $productos = $query
-            ->orderByRaw('CASE WHEN codigo_interno_ml IS NOT NULL AND codigo_interno_ml != "" THEN 0 ELSE 1 END')
+            ->orderByRaw('CASE 
+        WHEN ventas_totales > 0 OR stock_full > 0 THEN 0 
+        ELSE 1 
+    END')
+            ->orderByRaw('ventas_totales DESC, stock_full DESC')
             ->orderBy('nombre')
             ->paginate(50)
             ->appends($request->all());
