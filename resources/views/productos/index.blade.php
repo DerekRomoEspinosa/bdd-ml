@@ -311,7 +311,7 @@
                                                         <div class="flex justify-center items-center gap-1">
                                                             <span class="text-gray-500">Ventas Totales ML:</span>
                                                             <span class="font-semibold text-gray-900">
-                                                                {{ $producto->ventas_30_dias > 0 ? $producto->ventas_30_dias : '-' }}
+                                                                {{ $producto->ventas_totales > 0 ? $producto->ventas_totales : '-' }}
                                                             </span>
                                                         </div>
                                                     </div>

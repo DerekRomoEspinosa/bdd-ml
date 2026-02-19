@@ -185,7 +185,7 @@ class ProductoController extends Controller
 
             $producto->update([
                 'stock_full' => $datos['stock_full'] ?? 0,
-                'ventas_30_dias' => $datos['ventas_totales'] ?? 0,
+                'ventas_totales' => $datos['ventas_totales'] ?? 0,
                 'ml_ultimo_sync' => $datos['sincronizado_en'],
             ]);
 
@@ -219,7 +219,7 @@ class ProductoController extends Controller
                         if ($datos['status'] !== 'error') {
                             $producto->update([
                                 'stock_full' => $datos['stock_full'] ?? 0,
-                                'ventas_30_dias' => $datos['ventas_totales'] ?? 0, // ✅
+                                'ventas_totales' => $datos['ventas_totales'] ?? 0,
                                 'ml_ultimo_sync' => $datos['sincronizado_en'],
                             ]);
                             $sincronizados++;

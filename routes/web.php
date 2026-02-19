@@ -301,7 +301,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             // ✅ CORREGIDO
             $producto->update([
                 'stock_full' => $datos['stock_full'] ?? 0,
-                'ventas_30_dias' => $datos['ventas_totales'] ?? 0,
+                'ventas_30_dias' => $datos['ventas_totales'] ?? 0, // ✅ AQUÍ
                 'ml_published_at' => $datos['ml_published_at'] ?? null,
                 'ml_ultimo_sync' => $datos['sincronizado_en'],
             ]);

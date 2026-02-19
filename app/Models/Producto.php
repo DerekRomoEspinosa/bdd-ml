@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 class Producto extends Model
 {
     protected $fillable = [
-        // ... tus campos existentes ...
+
         'nombre',
         'sku_ml',
         'codigo_interno_ml',
@@ -18,11 +18,10 @@ class Producto extends Model
         'stock_por_empacar',
         'stock_enviado_full',
         'stock_full',
-        'ventas_totales', // ← RENOMBRADO (era ventas_30_dias)
-        'ventas_totales_reporte_anterior', // ← NUEVO
-        'ventas_30_dias_calculadas', // ← NUEVO
-        'fecha_ultimo_reporte', // ← NUEVO
-        'usa_variante_para_fabricacion', // ← NUEVO
+        'ventas_totales',
+        'ventas_totales_reporte_anterior',
+        'ventas_30_dias_calculadas',
+        'fecha_ultimo_reporte',
         'ml_ultimo_sync',
         'ml_published_at',
         'activo',
@@ -35,6 +34,9 @@ class Producto extends Model
         'ml_ultimo_sync' => 'datetime',
         'ml_published_at' => 'datetime',
         'fecha_ultimo_reporte' => 'datetime',
+        'ventas_totales' => 'integer',
+        'ventas_totales_reporte_anterior' => 'integer',
+        'ventas_30_dias_calculadas' => 'integer',
     ];
 
     /**
@@ -54,7 +56,7 @@ class Producto extends Model
     {
         $ventasActuales = $this->ventas_totales ?? 0;
         $ventasAntes = $this->ventas_totales_reporte_anterior ?? 0;
-        
+
         $this->ventas_30_dias_calculadas = max(0, $ventasActuales - $ventasAntes);
         $this->save();
     }
@@ -66,18 +68,18 @@ class Producto extends Model
     {
         // Guardar ventas actuales como reporte anterior
         $this->ventas_totales_reporte_anterior = $this->ventas_totales ?? 0;
-        
+
         // Actualizar ventas totales
         $this->ventas_totales = $nuevasVentasTotales;
-        
+
         // Calcular diferencia (ventas últimos 30 días)
         $this->calcularVentas30Dias();
-        
+
         // Marcar fecha del reporte
         $this->fecha_ultimo_reporte = now();
-        
+
         $this->save();
-        
+
         // Si tiene variantes, actualizar contadores de variantes
         if ($this->usa_variante_para_fabricacion) {
             foreach ($this->variantes as $variante) {
@@ -115,9 +117,9 @@ class Producto extends Model
 
         $stockDisponible = $this->stock_total;
         $ventasProyectadas = ($this->ventas_30_dias_calculadas ?? 0) * 2; // 60 días
-        
+
         $deficit = $ventasProyectadas - $stockDisponible;
-        
+
         $this->recomendacion_fabricacion = max(0, $deficit);
         $this->save();
     }
