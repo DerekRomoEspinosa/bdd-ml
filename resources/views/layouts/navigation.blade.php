@@ -19,6 +19,9 @@
                     <x-nav-link :href="route('productos.index')" :active="request()->routeIs('productos.index')">
                         {{ __('Productos') }}
                     </x-nav-link>
+                      <x-nav-link :href="route('variantes.index')" :active="request()->routeIs('variantes.*')">
+        {{ __('Variantes') }}
+    </x-nav-link>
                     
                     {{-- <x-nav-link :href="route('productos.import.form')" :active="request()->routeIs('productos.import.*')">
                         {{ __('Importar Excel') }}
@@ -76,17 +79,16 @@
     <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden">
         <div class="pt-2 pb-3 space-y-1">
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                {{ __('Dashboard') }}
+                {{ __('Inicio') }}
             </x-responsive-nav-link>
             
             <x-responsive-nav-link :href="route('productos.index')" :active="request()->routeIs('productos.index')">
                 {{ __('Productos') }}
             </x-responsive-nav-link>
             
-            <x-responsive-nav-link :href="route('productos.import.form')" :active="request()->routeIs('productos.import.*')">
-                {{ __('Importar Excel') }}
-            </x-responsive-nav-link>
-        </div>
+             <x-responsive-nav-link :href="route('variantes.index')" :active="request()->routeIs('variantes.*')">
+            {{ __('Variantes') }}
+        </x-responsive-nav-link>
 
         <!-- Responsive Settings Options -->
         <div class="pt-4 pb-1 border-t border-gray-200">

@@ -59,10 +59,6 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-                PDO::ATTR_TIMEOUT => 30, // ✅ Timeout más largo
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::MYSQL_ATTR_INIT_COMMAND => "SET SESSION wait_timeout=600", // ✅ Mantener conexión
             ]) : [],
             'sticky' => true,
         ],
